@@ -91,8 +91,15 @@ body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;font-size:15px;backg
 <body>
 
 <div class="hdr">
-  <h1>🌸 Maa's Treatment Tracker</h1>
-  <div class="hdr-sub" id="hdr-sub">Loading…</div>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start">
+    <div>
+      <h1>🌸 Maa's Treatment Tracker</h1>
+      <div class="hdr-sub" id="hdr-sub">Loading…</div>
+    </div>
+    <button onclick="nav('settings')" id="hdr-gear" style="background:none;border:none;cursor:pointer;color:#888;padding:4px;flex-shrink:0" title="Settings">
+      <svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
 </div>
 
 <!-- ADD PAGE -->
@@ -167,6 +174,20 @@ body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;font-size:15px;backg
   <div id="tl-list"></div>
 </div>
 
+<!-- NOTES PAGE -->
+<div class="pg" id="pg-notes">
+  <div style="height:14px"></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div>
+      <div style="font-size:16px;font-weight:700">Notes</div>
+      <div style="font-size:12px;color:#999">Reminders, checklists & things to discuss</div>
+    </div>
+  </div>
+  <button class="btn-add" onclick="newNote()" style="margin-bottom:12px">+ New Note</button>
+  <div class="chips" id="note-chips"></div>
+  <div id="notes-list"></div>
+</div>
+
 <!-- BLOOD PAGE -->
 <div class="pg" id="pg-blood">
   <div style="height:14px"></div>
@@ -177,6 +198,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;font-size:15px;backg
     </div>
     <div style="display:flex;gap:6px">
       <button onclick="openParamManager()" class="btn-sm">⚙ Params</button>
+      <button onclick="downloadBloodPDF()" class="btn-sm">📄 PDF</button>
       <button onclick="exportBloodExcel()" class="btn-sm">⬇ Excel</button>
     </div>
   </div>
@@ -330,6 +352,53 @@ body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;font-size:15px;backg
   </div>
 </div>
 
+<!-- NOTE EDITOR MODAL -->
+<div class="overlay" id="note-modal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div class="modal-ttl" id="note-m-title">New Note</div>
+      <button onclick="closeNoteModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#aaa">✕</button>
+    </div>
+    <div class="fg"><label>Type</label>
+      <select id="note-type">
+        <option value="doctor">👨‍⚕️ For doctor (next visit)</option>
+        <option value="hospital">🎒 Hospital checklist (things to carry)</option>
+        <option value="general">📝 General note</option>
+      </select>
+    </div>
+    <div class="fg"><label>Title <span style="font-weight:400;color:#bbb">(optional)</span></label>
+      <input type="text" id="note-title-inp" placeholder="e.g. Ask about cough, Next chemo prep…"></div>
+    <div class="fg"><label>Content</label>
+      <textarea id="note-body" style="height:140px" placeholder="Write your note, list, or questions here…
+Tip: start lines with - for a checklist"></textarea></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button onclick="saveNote()" class="btn-add" style="flex:1">Save Note</button>
+      <button id="note-del" onclick="deleteNote()" style="display:none;padding:12px 16px;background:#fdf0ef;color:#c0392b;border:1px solid #f5c0bb;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- SHARE LINK MODAL -->
+<div class="overlay" id="share-modal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div class="modal-ttl">Share with Doctor</div>
+      <button onclick="closeShareModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#aaa">✕</button>
+    </div>
+    <p style="font-size:13px;color:#888;margin-bottom:6px">This link contains all blood reports (Key + All parameters). The doctor can open it in any browser — nothing to install. It opens a <strong>read-only</strong> view.</p>
+    <p style="font-size:12px;color:#c0392b;margin-bottom:12px">⚠️ The link contains the data itself — send it only to the doctor.</p>
+    <textarea id="share-link-box" readonly style="height:80px;font-size:11px;color:#555;background:#f5f4f1;width:100%;border:1px solid #e0ddd6;border-radius:8px;padding:10px;word-break:break-all"></textarea>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button onclick="copyShareLink()" class="btn-add" style="flex:1">📋 Copy link</button>
+      <button onclick="whatsappShareLink()" style="flex:1;padding:13px;background:#25D366;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">WhatsApp</button>
+    </div>
+    <div id="share-size-note" style="font-size:11px;color:#bbb;margin-top:8px;text-align:center"></div>
+  </div>
+</div>
+
+<!-- READ-ONLY SHARED VIEWER (shown when opened via a shared link) -->
+<div id="shared-viewer" style="display:none;position:fixed;inset:0;background:#f5f4f1;z-index:9999;overflow-y:auto;padding:16px 14px 40px"></div>
+
 <div class="toast" id="toast"></div>
 
 <!-- NAV — last in DOM so always on top -->
@@ -349,8 +418,8 @@ body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;font-size:15px;backg
   <button id="nb-expenses" onclick="nav('expenses')">
     <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Expenses
   </button>
-  <button id="nb-settings" onclick="nav('settings')">
-    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings
+  <button id="nb-notes" onclick="nav('notes')">
+    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>Notes
   </button>
 </div>
 
@@ -369,6 +438,7 @@ var CATEGORIES = [
 var customSubs = {}; // {categoryKey: [extra subtypes typed by user]}
 
 var entries = [], curFilter = 'all', pendingFile = null, curPage = 'add', editingId = null;
+var notes = [], noteFilter = 'all', editingNoteId = null;
 
 function getCatDef(key){
   for(var i=0;i<CATEGORIES.length;i++){ if(CATEGORIES[i].key===key) return CATEGORIES[i]; }
@@ -482,17 +552,123 @@ function distinct(field){
   return out.sort();
 }
 
+// ─── NOTES ────────────────────────────────────────────────────────────────────
+var NOTE_TYPES = {
+  doctor:   {label:'For Doctor', icon:'👨‍⚕️', bg:'#ede8fd', fg:'#4a2c9e'},
+  hospital: {label:'Hospital Checklist', icon:'🎒', bg:'#fef3db', fg:'#7a4a00'},
+  general:  {label:'General', icon:'📝', bg:'#d4f0e4', fg:'#0a5c35'}
+};
+function loadNotes(){
+  try{ var s=localStorage.getItem('maa_notes'); if(s) notes=JSON.parse(s); }catch(e){}
+}
+function saveNotes(){ try{ localStorage.setItem('maa_notes',JSON.stringify(notes)); }catch(e){} }
+
+function newNote(){
+  editingNoteId = null;
+  document.getElementById('note-m-title').textContent = 'New Note';
+  document.getElementById('note-type').value = (noteFilter!=='all'?noteFilter:'doctor');
+  document.getElementById('note-title-inp').value = '';
+  document.getElementById('note-body').value = '';
+  document.getElementById('note-del').style.display = 'none';
+  document.getElementById('note-modal').className = 'overlay on';
+}
+function editNote(id){
+  var n=null; for(var i=0;i<notes.length;i++){ if(notes[i].id===id){n=notes[i];break;} }
+  if(!n) return;
+  editingNoteId = id;
+  document.getElementById('note-m-title').textContent = 'Edit Note';
+  document.getElementById('note-type').value = n.type;
+  document.getElementById('note-title-inp').value = n.title||'';
+  document.getElementById('note-body').value = n.body||'';
+  document.getElementById('note-del').style.display = 'block';
+  document.getElementById('note-modal').className = 'overlay on';
+}
+function closeNoteModal(){ document.getElementById('note-modal').className='overlay'; editingNoteId=null; }
+function saveNote(){
+  var type = document.getElementById('note-type').value;
+  var title = document.getElementById('note-title-inp').value.trim();
+  var body = document.getElementById('note-body').value.trim();
+  if(!title && !body){ toast('Write something first'); return; }
+  if(editingNoteId){
+    for(var i=0;i<notes.length;i++){ if(notes[i].id===editingNoteId){ notes[i].type=type; notes[i].title=title; notes[i].body=body; notes[i].updated=Date.now(); break; } }
+    toast('✓ Note updated');
+  } else {
+    notes.unshift({id:Date.now(), type:type, title:title, body:body, done:false, created:Date.now(), updated:Date.now()});
+    toast('✓ Note added');
+  }
+  saveNotes(); closeNoteModal(); renderNotes();
+}
+function deleteNote(){
+  if(!editingNoteId) return;
+  if(!confirm('Delete this note?')) return;
+  notes = notes.filter(function(n){ return n.id!==editingNoteId; });
+  saveNotes(); closeNoteModal(); renderNotes(); toast('Deleted');
+}
+function toggleNoteDone(id){
+  for(var i=0;i<notes.length;i++){ if(notes[i].id===id){ notes[i].done=!notes[i].done; break; } }
+  saveNotes(); renderNotes();
+}
+function setNoteFilter(f){ noteFilter=f; renderNotes(); }
+
+function renderNotes(){
+  // Filter chips
+  var chips = '<button class="chip'+(noteFilter==='all'?' on':'')+'" onclick="setNoteFilter(\'all\')">All</button>';
+  Object.keys(NOTE_TYPES).forEach(function(k){
+    chips += '<button class="chip'+(noteFilter===k?' on':'')+'" onclick="setNoteFilter(\''+k+'\')">'+NOTE_TYPES[k].icon+' '+NOTE_TYPES[k].label+'</button>';
+  });
+  document.getElementById('note-chips').innerHTML = chips;
+
+  var list = document.getElementById('notes-list');
+  var data = noteFilter==='all' ? notes : notes.filter(function(n){ return n.type===noteFilter; });
+  if(!data.length){
+    list.innerHTML = '<div class="empty">No notes'+(noteFilter!=='all'?' of this type':'')+' yet.<br>Tap + New Note to add one.</div>';
+    return;
+  }
+  // Sort: not-done first, then most recently updated
+  data = data.slice().sort(function(a,b){
+    if(!!a.done !== !!b.done) return a.done?1:-1;
+    return (b.updated||0)-(a.updated||0);
+  });
+  list.innerHTML = data.map(function(n){
+    var t = NOTE_TYPES[n.type]||NOTE_TYPES.general;
+    // Render body: lines starting with - become checkable-looking bullets
+    var bodyHtml = (n.body||'').split('\n').map(function(line){
+      var tr=line.trim();
+      if(tr.indexOf('-')===0) return '<div style="display:flex;gap:7px;padding:2px 0"><span style="color:#bbb">☐</span><span>'+tr.slice(1).trim()+'</span></div>';
+      if(!tr) return '<div style="height:6px"></div>';
+      return '<div style="padding:1px 0">'+tr+'</div>';
+    }).join('');
+    return '<div class="card" style="border-left:4px solid '+t.fg+';margin-bottom:10px;'+(n.done?'opacity:.55':'')+'">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'
+        +'<div style="flex:1;min-width:0">'
+          +'<span class="tag" style="background:'+t.bg+';color:'+t.fg+'">'+t.icon+' '+t.label+'</span>'
+          +(n.title?'<div style="font-size:15px;font-weight:700;margin:6px 0 4px;'+(n.done?'text-decoration:line-through':'')+'">'+n.title+'</div>':'<div style="height:4px"></div>')
+          +'<div style="font-size:13px;color:#555;line-height:1.5">'+bodyHtml+'</div>'
+        +'</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:8px;margin-top:10px;padding-top:8px;border-top:1px solid #f0efeb">'
+        +'<button class="btn-sm" onclick="toggleNoteDone('+n.id+')">'+(n.done?'↩ Mark active':'✓ Mark done')+'</button>'
+        +'<button class="btn-sm" onclick="editNote('+n.id+')">✎ Edit</button>'
+      +'</div>'
+      +'</div>';
+  }).join('');
+}
+
 // ─── NAV ──────────────────────────────────────────────────────────────────────
 function nav(page){
   curPage = page;
-  var pages = ['add','timeline','blood','expenses','summary','settings'];
+  var pages = ['add','timeline','notes','blood','expenses','summary','settings'];
   for(var i=0;i<pages.length;i++){
     var pg = document.getElementById('pg-'+pages[i]);
     var nb = document.getElementById('nb-'+pages[i]);
     if(pg) pg.className = 'pg' + (pages[i]===page ? ' on' : '');
     if(nb) nb.className = (pages[i]===page ? 'on' : '');
   }
+  // Settings has no nav button (opens from header gear) — highlight gear when active
+  var gear = document.getElementById('hdr-gear');
+  if(gear) gear.style.color = (page==='settings') ? '#1a6b4a' : '#888';
   if(page==='timeline'){ buildChips(); renderTimeline(); }
+  if(page==='notes') renderNotes();
   if(page==='blood') renderBloodPage();
   if(page==='expenses') renderExpenses();
   if(page==='summary') renderSummary();
@@ -845,7 +1021,7 @@ function exportCSV(){
 
 // ─── BACKUP / RESTORE ─────────────────────────────────────────────────────────
 function exportBackup(){
-  var payload={entries:entries,customSubs:customSubs,at:new Date().toISOString(),v:3};
+  var payload={entries:entries,customSubs:customSubs,notes:notes,sectionOrder:sectionOrder,at:new Date().toISOString(),v:5};
   dl(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),'maa_backup_'+new Date().toISOString().slice(0,10)+'.json');
   toast('✓ Backup downloaded');
 }
@@ -860,6 +1036,8 @@ function restoreBackup(ev){
       entries=(d.entries||[]).map(migrateEntry);
       entries.sort(function(a,b){return b.date.localeCompare(a.date);});
       if(d.customSubs) customSubs=d.customSubs;
+      if(d.notes){ notes=d.notes; saveNotes(); }
+      if(d.sectionOrder){ sectionOrder=d.sectionOrder; saveBlood(); }
       saveData(); buildChips(); updateHeader(); renderSettings(); refreshDatalists();
       document.getElementById('imp-bak').value='';
       toast('✓ Restored '+entries.length+' entries');
@@ -970,7 +1148,8 @@ var BLOOD_SEED=[{"date": "2026-06-08", "lab": "Hlth", "values": {"Haemoglobin (H
 // ═══════════════════════════════════════════════════════════════════════════
 // BLOOD REPORT TRACKER MODULE
 // ═══════════════════════════════════════════════════════════════════════════
-var bloodReports = [];   // [{id,date,lab,values:{name:val}}]
+var bloodReports = [];
+var sectionOrder = [];   // user's preferred section ordering for Key view
 var bloodView = 'key';   // 'key' or 'all'
 var bloodEntryDraft = {};
 var customLabs = [];      // user-added lab names
@@ -989,6 +1168,7 @@ function loadBlood(){
   try{ var cl=localStorage.getItem('maa_blood_labs'); if(cl) customLabs=JSON.parse(cl); }catch(e){}
   try{ var cp=localStorage.getItem('maa_blood_params'); if(cp) customParams=JSON.parse(cp); }catch(e){}
   try{ var ko=localStorage.getItem('maa_blood_keyoverrides'); if(ko) keyOverrides=JSON.parse(ko); }catch(e){}
+  try{ var so=localStorage.getItem('maa_blood_sectionorder'); if(so) sectionOrder=JSON.parse(so); }catch(e){}
   // Seed with uploaded data if empty and not yet seeded
   if(!bloodReports.length && !localStorage.getItem('maa_blood_seeded')){
     bloodReports = BLOOD_SEED.map(function(r,i){ return {id:Date.now()+i, date:r.date, lab:r.lab, values:r.values}; });
@@ -1001,6 +1181,40 @@ function saveBlood(){
   try{ localStorage.setItem('maa_blood_labs',JSON.stringify(customLabs)); }catch(e){}
   try{ localStorage.setItem('maa_blood_params',JSON.stringify(customParams)); }catch(e){}
   try{ localStorage.setItem('maa_blood_keyoverrides',JSON.stringify(keyOverrides)); }catch(e){}
+  try{ localStorage.setItem('maa_blood_sectionorder',JSON.stringify(sectionOrder)); }catch(e){}
+}
+// Natural section order as they first appear in the parameter list
+function naturalSectionOrder(){
+  var seen={}, out=[];
+  allBloodParams().forEach(function(p){ if(!seen[p[3]]){ seen[p[3]]=1; out.push(p[3]); } });
+  return out;
+}
+// Effective order = user's saved order first (for those still present), then any new sections
+function effectiveSectionOrder(){
+  var natural = naturalSectionOrder();
+  var ordered = sectionOrder.filter(function(s){ return natural.indexOf(s)>=0; });
+  natural.forEach(function(s){ if(ordered.indexOf(s)<0) ordered.push(s); });
+  return ordered;
+}
+// Return params sorted by the effective section order, preserving within-section order
+function paramsBySectionOrder(list){
+  var order = effectiveSectionOrder();
+  return list.slice().sort(function(a,b){
+    var ia=order.indexOf(a[3]), ib=order.indexOf(b[3]);
+    if(ia!==ib) return ia-ib;
+    return 0; // stable: keep original within-section order
+  });
+}
+function moveSection(section, dir){
+  var order = effectiveSectionOrder();
+  var i = order.indexOf(section);
+  if(i<0) return;
+  var j = i + dir;
+  if(j<0 || j>=order.length) return;
+  var tmp = order[i]; order[i]=order[j]; order[j]=tmp;
+  sectionOrder = order;
+  saveBlood();
+  renderBloodPage();
 }
 function openKeyEditor(){
   renderKeyEditor();
@@ -1132,6 +1346,7 @@ function flagValue(val, ref){
 function renderBloodPage(){
   // Build view toggle + table
   var params = allBloodParams().filter(function(p){ return bloodView==='all' ? true : isKeyParam(p); });
+  params = paramsBySectionOrder(params);
   // Sort reports by date desc
   var reps = [].concat(bloodReports).sort(function(a,b){ return b.date.localeCompare(a.date); });
 
@@ -1157,18 +1372,24 @@ function renderBloodPage(){
   }
 
   // Build comparison table
-  html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #e4e2db;border-radius:10px;background:#fff">';
+  html += '<div style="overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid #e4e2db;border-radius:10px;background:#fff;max-height:calc(100vh - 220px)">';
   html += '<table style="border-collapse:collapse;font-size:12px;min-width:100%">';
   // Header
   html += '<thead><tr>';
-  html += '<th style="position:sticky;left:0;background:#f5f4f1;z-index:3;text-align:left;padding:8px 8px;border-bottom:2px solid #e4e2db;min-width:110px;max-width:140px;font-size:11px;white-space:normal;line-height:1.25">Parameter</th>';
-  html += '<th style="background:#f5f4f1;padding:8px 6px;border-bottom:2px solid #e4e2db;font-size:10px;color:#999;min-width:54px">Ref</th>';
-  reps.forEach(function(rp){
+  html += '<th style="position:sticky;left:0;top:0;background:#f5f4f1;z-index:6;text-align:left;padding:8px 8px;border-bottom:2px solid #e4e2db;min-width:78px;max-width:95px;font-size:10px;white-space:normal;line-height:1.2">Parameter</th>';
+  html += '<th style="position:sticky;top:0;background:#f5f4f1;padding:8px 6px;border-bottom:2px solid #e4e2db;font-size:10px;color:#999;min-width:54px;z-index:5">Ref</th>';
+  reps.forEach(function(rp, idx){
     var ds = fmtShort(rp.date);
-    html += '<th style="background:#f5f4f1;padding:6px 8px;border-bottom:2px solid #e4e2db;text-align:center;min-width:58px;cursor:pointer" onclick="openBloodReport('+rp.id+')">'
-      +'<div style="font-weight:700;font-size:12px">'+ds.day+' '+ds.mon.split(' ')[0]+'</div>'
-      +'<div style="font-size:9px;color:#999">'+ds.mon.split(' ')[1]+'</div>'
-      +'<div style="font-size:9px;color:#1a6b4a;font-weight:600;margin-top:1px">'+(rp.lab||'')+'</div>'
+    var latest = (idx===0);
+    var bg = latest ? '#1a6b4a' : '#f5f4f1';
+    var dcol = latest ? '#fff' : '#1a1a18';
+    var subcol = latest ? '#cfe8da' : '#999';
+    var labcol = latest ? '#fff' : '#1a6b4a';
+    html += '<th style="position:sticky;top:0;z-index:5;background:'+bg+';padding:6px 8px;border-bottom:2px solid #e4e2db;text-align:center;min-width:58px;cursor:pointer" onclick="openBloodReport('+rp.id+')">'
+      +(latest?'<div style="font-size:8px;color:#cfe8da;font-weight:700;letter-spacing:.03em">LATEST</div>':'')
+      +'<div style="font-weight:700;font-size:12px;color:'+dcol+'">'+ds.day+' '+ds.mon.split(' ')[0]+'</div>'
+      +'<div style="font-size:9px;color:'+subcol+'">'+ds.mon.split(' ')[1]+'</div>'
+      +'<div style="font-size:9px;color:'+labcol+';font-weight:600;margin-top:1px">'+(rp.lab||'')+'</div>'
       +'</th>';
   });
   html += '</tr></thead><tbody>';
@@ -1179,24 +1400,37 @@ function renderBloodPage(){
     var pname=p[0], unit=p[1], ref=p[2], section=p[3];
     if(section!==lastSection){
       var span = reps.length+2;
-      html += '<tr><td colspan="'+span+'" style="background:#eef2ee;padding:5px 10px;font-size:9px;font-weight:700;color:#5a7a5a;letter-spacing:.03em;position:sticky;left:0">'+section.split('—')[0].trim()+'</td></tr>';
+      var ctrls = '';
+      if(bloodView==='key'){
+        var eo = effectiveSectionOrder();
+        var si = eo.indexOf(section);
+        var upDis = si<=0, downDis = si>=eo.length-1;
+        ctrls = '<span style="float:right;display:inline-flex;gap:2px">'
+          +'<button onclick="moveSection(\''+section.replace(/'/g,"\\'")+'\',-1)" '+(upDis?'disabled':'')+' style="border:none;background:'+(upDis?'#e8ece8':'#dbe7db')+';color:'+(upDis?'#bbb':'#3a6a3a')+';border-radius:4px;width:22px;height:18px;cursor:'+(upDis?'default':'pointer')+';font-size:11px;line-height:1;padding:0">▲</button>'
+          +'<button onclick="moveSection(\''+section.replace(/'/g,"\\'")+'\',1)" '+(downDis?'disabled':'')+' style="border:none;background:'+(downDis?'#e8ece8':'#dbe7db')+';color:'+(downDis?'#bbb':'#3a6a3a')+';border-radius:4px;width:22px;height:18px;cursor:'+(downDis?'default':'pointer')+';font-size:11px;line-height:1;padding:0">▼</button>'
+          +'</span>';
+      }
+      html += '<tr><td colspan="'+span+'" style="background:#eef2ee;padding:5px 10px;font-size:9px;font-weight:700;color:#5a7a5a;letter-spacing:.03em;position:sticky;left:0">'+section.split('—')[0].trim()+ctrls+'</td></tr>';
       lastSection = section;
     }
     html += '<tr>';
-    html += '<td style="position:sticky;left:0;background:#fff;z-index:1;padding:7px 8px;border-bottom:1px solid #f0efeb;font-size:11px;min-width:110px;max-width:140px;white-space:normal;line-height:1.25">'+pname+(unit?' <span style="color:#bbb;font-size:10px">'+unit+'</span>':'')+'</td>';
+    html += '<td style="position:sticky;left:0;background:#fff;z-index:1;padding:7px 8px;border-bottom:1px solid #f0efeb;font-size:11px;min-width:78px;max-width:95px;white-space:normal;line-height:1.2">'+pname+(unit?' <span style="color:#bbb;font-size:10px">'+unit+'</span>':'')+'</td>';
     html += '<td style="padding:7px 6px;border-bottom:1px solid #f0efeb;font-size:10px;color:#aaa;text-align:center">'+(ref||'—')+'</td>';
-    reps.forEach(function(rp){
+    reps.forEach(function(rp, idx){
+      var isLatest = (idx===0);
       var v = rp.values[pname];
       if(v===undefined||v===null||v===''){
-        html += '<td style="padding:7px 8px;border-bottom:1px solid #f0efeb;text-align:center;color:#ddd">·</td>';
+        html += '<td style="padding:7px 8px;border-bottom:1px solid #f0efeb;text-align:center;color:#ddd'+(isLatest?';background:#eef5f0':'')+'">·</td>';
       } else {
         var flag = flagValue(v, ref);
+        var abnormal = (flag==='high'||flag==='low');
+        var arrow = flag==='high' ? ' ▲' : flag==='low' ? ' ▼' : '';
         var style = 'padding:7px 8px;border-bottom:1px solid #f0efeb;text-align:center;font-weight:600;';
-        if(flag==='high') style+='color:#c0392b;background:#fdf0ef';
-        else if(flag==='low') style+='color:#2471a3;background:#eaf2fb';
-        else if(flag==='ok') style+='color:#1a6b4a';
-        else style+='color:#444';
-        var arrow = flag==='high'?' ▲':flag==='low'?' ▼':'';
+        if(abnormal){
+          style += 'color:#c0392b;background:'+(isLatest?'#f9dede':'#fdecec');
+        } else {
+          style += 'color:#1a1a18'+(isLatest?';background:#eef5f0':'');
+        }
         html += '<td style="'+style+'">'+v+arrow+'</td>';
       }
     });
@@ -1205,8 +1439,7 @@ function renderBloodPage(){
   html += '</tbody></table></div>';
   html += '<div style="display:flex;gap:12px;margin-top:10px;font-size:11px;color:#999;flex-wrap:wrap">'
     +'<span><span style="color:#c0392b;font-weight:700">▲</span> Above range</span>'
-    +'<span><span style="color:#2471a3;font-weight:700">▼</span> Below range</span>'
-    +'<span><span style="color:#1a6b4a;font-weight:700">●</span> Normal</span>'
+    +'<span><span style="color:#c0392b;font-weight:700">▼</span> Below range</span>'
     +'<span style="color:#bbb">Tap a date column to edit/delete</span></div>';
 
   document.getElementById('blood-table').innerHTML = html;
@@ -1294,6 +1527,227 @@ function deleteBloodReport(){
 }
 function closeBloodModal(){ document.getElementById('blood-modal').className='overlay'; editingBloodId=null; }
 
+// ─── SHARE BLOOD DATA AS A LINK ───────────────────────────────────────────────
+// Encodes all blood reports + custom params + key overrides + section order into the URL.
+// The doctor opens the link → app detects it → shows a read-only viewer.
+function buildSharePayload(){
+  return {
+    reports: bloodReports.map(function(r){ return {date:r.date, lab:r.lab, values:r.values}; }),
+    customParams: customParams,
+    keyOverrides: keyOverrides,
+    sectionOrder: sectionOrder,
+    sharedAt: new Date().toISOString().slice(0,10)
+  };
+}
+// UTF-8 safe base64
+function utf8ToB64(str){ return btoa(unescape(encodeURIComponent(str))); }
+function b64ToUtf8(str){ return decodeURIComponent(escape(atob(str))); }
+
+function shareBloodLink(){
+  if(!bloodReports.length){ toast('No blood reports to share'); return; }
+  var json = JSON.stringify(buildSharePayload());
+  var encoded = utf8ToB64(json);
+  var base = location.origin + location.pathname;
+  var link = base + '#blood=' + encoded;
+  document.getElementById('share-link-box').value = link;
+  var kb = Math.round(link.length/1024*10)/10;
+  document.getElementById('share-size-note').textContent = 'Link length: ~'+kb+' KB · '+bloodReports.length+' reports included';
+  document.getElementById('share-modal').className = 'overlay on';
+}
+function closeShareModal(){ document.getElementById('share-modal').className='overlay'; }
+function copyShareLink(){
+  var box = document.getElementById('share-link-box');
+  box.select(); box.setSelectionRange(0, 999999);
+  try{
+    if(navigator.clipboard){ navigator.clipboard.writeText(box.value); }
+    else { document.execCommand('copy'); }
+    toast('✓ Link copied');
+  }catch(e){ document.execCommand('copy'); toast('✓ Link copied'); }
+}
+function whatsappShareLink(){
+  var link = document.getElementById('share-link-box').value;
+  var msg = 'Blood reports for review:\n'+link;
+  window.open('https://wa.me/?text='+encodeURIComponent(msg), '_blank');
+}
+
+// ─── READ-ONLY SHARED VIEWER (runs on the doctor's device) ────────────────────
+function checkForSharedData(){
+  var hash = location.hash || '';
+  if(hash.indexOf('#blood=')!==0) return false;
+  try{
+    var encoded = hash.slice('#blood='.length);
+    var data = JSON.parse(b64ToUtf8(encoded));
+    renderSharedViewer(data);
+    return true;
+  }catch(e){
+    return false;
+  }
+}
+function renderSharedViewer(data){
+  // Build a combined params list = built-in + any custom shared
+  var params = BLOOD_PARAMS.concat(data.customParams||[]);
+  var ko = data.keyOverrides||{};
+  function isKey(p){ if(ko.hasOwnProperty(p[0])) return ko[p[0]]===1; return p[4]===1; }
+  // Section order
+  var order = (data.sectionOrder&&data.sectionOrder.length)?data.sectionOrder.slice():[];
+  (function(){ var seen={}; params.forEach(function(p){ if(!seen[p[3]]){ seen[p[3]]=1; if(order.indexOf(p[3])<0) order.push(p[3]); } }); })();
+  function bySec(list){ return list.slice().sort(function(a,b){ return order.indexOf(a[3])-order.indexOf(b[3]); }); }
+
+  var reps = (data.reports||[]).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+
+  var viewState = {mode:'key'};
+  function build(){
+    var showParams = bySec(params.filter(function(p){ return viewState.mode==='all'?true:isKey(p); }));
+    var h = '';
+    h += '<div style="max-width:900px;margin:0 auto">';
+    h += '<div style="background:#fff;border:1px solid #e4e2db;border-radius:12px;padding:14px 16px;margin-bottom:12px">';
+    h += '<div style="font-size:18px;font-weight:700">🌸 Blood Reports</div>';
+    h += '<div style="font-size:12px;color:#999;margin-top:2px">Shared on '+(data.sharedAt||'')+' · Read-only view · '+reps.length+' reports</div>';
+    h += '</div>';
+    // Toggle
+    h += '<div style="display:flex;gap:8px;margin-bottom:12px">';
+    h += '<button onclick="window._sv_set(&#39;key&#39;)" style="padding:6px 14px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid '+(viewState.mode==='key'?'#1a6b4a':'#e0ddd6')+';background:'+(viewState.mode==='key'?'#1a6b4a':'#fff')+';color:'+(viewState.mode==='key'?'#fff':'#888')+';font-family:inherit">Key parameters</button>';
+    h += '<button onclick="window._sv_set(&#39;all&#39;)" style="padding:6px 14px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid '+(viewState.mode==='all'?'#1a6b4a':'#e0ddd6')+';background:'+(viewState.mode==='all'?'#1a6b4a':'#fff')+';color:'+(viewState.mode==='all'?'#fff':'#888')+';font-family:inherit">All parameters</button>';
+    h += '</div>';
+    // Table
+    h += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #e4e2db;border-radius:10px;background:#fff">';
+    h += '<table style="border-collapse:collapse;font-size:12px;min-width:100%">';
+    h += '<thead><tr>';
+    h += '<th style="position:sticky;left:0;background:#f5f4f1;z-index:3;text-align:left;padding:8px;border-bottom:2px solid #e4e2db;min-width:78px;max-width:95px;font-size:10px;white-space:normal;line-height:1.2">Parameter</th>';
+    h += '<th style="background:#f5f4f1;padding:8px 6px;border-bottom:2px solid #e4e2db;font-size:10px;color:#999;min-width:54px">Ref</th>';
+    reps.forEach(function(rp){
+      var d=new Date(rp.date+'T00:00:00');
+      var dd=d.getDate(), mo=d.toLocaleDateString('en-IN',{month:'short'}), yr=d.toLocaleDateString('en-IN',{year:'2-digit'});
+      h += '<th style="background:#f5f4f1;padding:6px 8px;border-bottom:2px solid #e4e2db;text-align:center;min-width:58px"><div style="font-weight:700;font-size:12px">'+dd+' '+mo+'</div><div style="font-size:9px;color:#999">'+yr+'</div><div style="font-size:9px;color:#1a6b4a;font-weight:600">'+(rp.lab||'')+'</div></th>';
+    });
+    h += '</tr></thead><tbody>';
+    var lastSec=null;
+    showParams.forEach(function(p){
+      var pname=p[0],unit=p[1],ref=p[2],section=p[3];
+      if(section!==lastSec){
+        var span=reps.length+2;
+        h += '<tr><td colspan="'+span+'" style="background:#eef2ee;padding:5px 10px;font-size:9px;font-weight:700;color:#5a7a5a;letter-spacing:.03em;position:sticky;left:0">'+section.split('—')[0].trim()+'</td></tr>';
+        lastSec=section;
+      }
+      h += '<tr>';
+      h += '<td style="position:sticky;left:0;background:#fff;z-index:1;padding:7px 8px;border-bottom:1px solid #f0efeb;font-size:11px;min-width:78px;max-width:95px;white-space:normal;line-height:1.2">'+pname+(unit?' <span style="color:#bbb;font-size:10px">'+unit+'</span>':'')+'</td>';
+      h += '<td style="padding:7px 6px;border-bottom:1px solid #f0efeb;font-size:10px;color:#aaa;text-align:center">'+(ref||'—')+'</td>';
+      reps.forEach(function(rp){
+        var v=rp.values[pname];
+        if(v===undefined||v===null||v===''){ h+='<td style="padding:7px 8px;border-bottom:1px solid #f0efeb;text-align:center;color:#ddd">·</td>'; }
+        else {
+          var flag=flagValue(v,ref);
+          var st='padding:7px 8px;border-bottom:1px solid #f0efeb;text-align:center;font-weight:600;';
+          if(flag==='high') st+='color:#c0392b;background:#fdf0ef';
+          else if(flag==='low') st+='color:#c0392b;background:#fdf0ef';
+          else if(flag==='ok') st+='color:#1a6b4a';
+          else st+='color:#444';
+          var ar=flag==='high'?' ▲':flag==='low'?' ▼':'';
+          h += '<td style="'+st+'">'+v+ar+'</td>';
+        }
+      });
+      h += '</tr>';
+    });
+    h += '</tbody></table></div>';
+    h += '<div style="display:flex;gap:12px;margin-top:10px;font-size:11px;color:#999;flex-wrap:wrap"><span><span style="color:#c0392b;font-weight:700">▲</span> Above range</span><span><span style="color:#c0392b;font-weight:700">▼</span> Below range</span><span><span style="color:#1a6b4a;font-weight:700">●</span> Normal</span></div>';
+    h += '<div style="text-align:center;margin-top:20px;font-size:11px;color:#ccc">Generated by Maa&#39;s Treatment Tracker</div>';
+    h += '</div>';
+    document.getElementById('shared-viewer').innerHTML = h;
+  }
+  window._sv_set = function(m){ viewState.mode=m; build(); };
+  build();
+  document.getElementById('shared-viewer').style.display = 'block';
+}
+
+// ─── DOWNLOAD BLOOD REPORT AS PDF (print-to-PDF) ───────────────────────────────
+function downloadBloodPDF(){
+  if(!bloodReports.length){ toast('No blood reports yet'); return; }
+  var reps = [].concat(bloodReports).sort(function(a,b){ return b.date.localeCompare(a.date); });
+
+  // Build a table section for a given parameter set
+  function sectionTable(onlyKey){
+    var params = paramsBySectionOrder(allBloodParams().filter(function(p){ return onlyKey ? isKeyParam(p) : true; }));
+    var h = '<table>';
+    // Header
+    h += '<thead><tr><th class="pname">Parameter</th><th class="ref">Ref</th>';
+    reps.forEach(function(rp, idx){
+      var d=new Date(rp.date+'T00:00:00');
+      var dd=d.getDate(), mo=d.toLocaleDateString('en-IN',{month:'short'}), yr=d.toLocaleDateString('en-IN',{year:'2-digit'});
+      var latest = idx===0 ? ' latest' : '';
+      h += '<th class="dc'+latest+'">'+(idx===0?'<span class="latestlbl">LATEST</span><br>':'')+dd+' '+mo+' '+yr+'<br><span class="lab">'+(rp.lab||'')+'</span></th>';
+    });
+    h += '</tr></thead><tbody>';
+    var lastSec=null;
+    params.forEach(function(p){
+      var pname=p[0],unit=p[1],ref=p[2],section=p[3];
+      if(section!==lastSec){
+        h += '<tr class="sec"><td colspan="'+(reps.length+2)+'">'+section.split('—')[0].trim()+'</td></tr>';
+        lastSec=section;
+      }
+      h += '<tr><td class="pname">'+pname+(unit?' <span class="unit">('+unit+')</span>':'')+'</td><td class="ref">'+(ref||'—')+'</td>';
+      reps.forEach(function(rp, idx){
+        var latest = idx===0 ? ' latestcol' : '';
+        var v=rp.values[pname];
+        if(v===undefined||v===null||v===''){ h+='<td class="v'+latest+'">·</td>'; }
+        else {
+          var flag=flagValue(v,ref);
+          var abn = (flag==='high'||flag==='low');
+          var ar = flag==='high'?' ▲':flag==='low'?' ▼':'';
+          h += '<td class="'+(abn?'v abn':'v')+latest+'">'+v+ar+'</td>';
+        }
+      });
+      h += '</tr>';
+    });
+    h += '</tbody></table>';
+    return h;
+  }
+
+  var today = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Blood Report</title>'
+    +'<style>'
+    +'@page{size:A4 landscape;margin:8mm}'
+    +'*{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}'
+    +'html,body{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}'
+    +'body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1a1a18;margin:0;padding:16px;font-size:12px}'
+    +'h1{font-size:20px;font-weight:700;margin:0 0 2px}'
+    +'.sub{font-size:12px;color:#999;margin-bottom:18px}'
+    +'h2{font-size:14px;font-weight:700;margin:16px 0 8px;color:#1a1a18}'
+    +'table{border-collapse:collapse;width:100%;font-size:12px;margin-bottom:8px;page-break-inside:auto}'
+    +'tr{page-break-inside:avoid}'
+    +'th,td{padding:6px 7px;text-align:center;border:none;border-bottom:1px solid #f0efeb}'
+    +'thead th{background:#f5f4f1;font-size:11px;font-weight:600;color:#555;border-bottom:2px solid #e4e2db}'
+    +'th.pname,td.pname{text-align:left;width:92px;max-width:92px;font-size:11px;line-height:1.25;white-space:normal;color:#1a1a18}'
+    +'.unit{color:#bbb;font-weight:400;font-size:10px}'
+    +'th.ref,td.ref{color:#aaa;font-size:10px;width:52px}'
+    +'th.dc{min-width:50px;color:#1a1a18;font-weight:700}'
+    +'th.dc.latest{background:#1a6b4a !important;color:#fff}'
+    +'.latestlbl{font-size:7px;color:#cfe8da;font-weight:700;letter-spacing:.04em;display:block}'
+    +'th.dc.latest .lab{color:#cfe8da}'
+    +'td.latestcol{background:#eef5f0 !important}'
+    +'.lab{font-size:9px;color:#1a6b4a;font-weight:600;display:block}'
+    +'tr.sec td{background:#eef2ee !important;text-align:left;font-weight:700;font-size:9px;color:#5a7a5a;letter-spacing:.04em;border-bottom:none;padding:5px 8px}'
+    +'td.v{font-weight:600;color:#1a1a18}'
+    +'td.abn{color:#c0392b !important;background:#fdecec !important}'
+    +'td.abn.latestcol{background:#f9dede !important}'
+    +'.legend{font-size:10px;color:#aaa;margin:4px 0 14px}'
+    +'.legend b{color:#c0392b}'
+    +'</style></head><body>'
+    +'<h1>Sunita Gupta &nbsp;|&nbsp; 59 Years &nbsp;|&nbsp; TNBC</h1>'
+    +'<div class="sub">Blood Report &middot; Generated '+today+' &middot; '+reps.length+' reports</div>'
+    +'<h2>Key Parameters</h2>'+sectionTable(true)
+    +'<div class="legend"><b>▲</b> above range &nbsp; <b>▼</b> below range &nbsp; · &nbsp; latest report highlighted</div>'
+    +'<div style="page-break-before:always"></div>'
+    +'<h2>All Parameters</h2>'+sectionTable(false)
+    +'<div class="legend"><b>▲</b> above range &nbsp; <b>▼</b> below range &nbsp; · &nbsp; latest report highlighted</div>'
+    +'<scr'+'ipt>window.onload=function(){setTimeout(function(){window.print();},400);};<'+'/scr'+'ipt>'
+    +'</body></html>';
+
+  var w = window.open('', '_blank');
+  if(!w){ toast('Allow pop-ups to make the PDF'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+  toast('Print: set Layout to Landscape, then Save as PDF');
+}
+
 // ─── EXPORT BLOOD TO EXCEL (same format as uploaded file) ──────────────────
 function exportBloodExcel(){
   if(!bloodReports.length){ toast('No blood reports yet'); return; }
@@ -1336,8 +1790,13 @@ function loadXLSX(cb){
 var SEED_ENTRIES=[{"id": 1781173981346, "date": "2026-06-11", "cat": "Imaging", "sub": "USG", "name": "Stomach Pain", "doc": "Dr. Yogesh", "spec": "Radiologist", "ordered": "Dr. Bhuvan", "hosp": "Medix Shalimar Bagh", "cost": 1200.0, "paid": "Gaurav", "remark": "For stomach tightness we reported to Dr. Bhuvan on 9th June when we went for Chemo Cycle 2 Part 3 (which eventually was postponed due to high fever)", "episode": "", "file": null}, {"id": 1781173981347, "date": "2026-06-09", "cat": "Consultation", "sub": "Consultation", "name": "High Fever", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Athenaa", "cost": 1700.0, "paid": "Gaurav", "remark": "Chemo 2 - Part 3 was to be done, but due to high fever postponed foe 11 June 2026", "episode": "", "file": null}, {"id": 1781173981348, "date": "2026-06-09", "cat": "Imaging", "sub": "CT / HRCT", "name": "Severe Cough", "doc": "Dr. Saurabh", "spec": "Radiologist", "ordered": "Dr. Bhuvan", "hosp": "Mahajan Lab", "cost": 4500.0, "paid": "Saurav", "remark": "Dr. Bhuvan asked for this test as severe cough and high fever was present on 9 June 2026", "episode": "", "file": null}, {"id": 1781173981349, "date": "2026-06-08", "cat": "Consultation", "sub": "Consultation", "name": "Severe Cough", "doc": "Dr. Amit Dhamija", "spec": "Pulmonologist", "ordered": "Self", "hosp": "Ganga Ram Hospital", "cost": 1500.0, "paid": "Gaurav", "remark": "Doctor ordered chest xray and sinus xray also same day.", "episode": "", "file": null}, {"id": 1781173981350, "date": "2026-06-08", "cat": "Imaging", "sub": "X-Ray", "name": "Chest X Ray", "doc": "Dr. Amit Dhamija", "spec": "Pulmonologist", "ordered": "Dr. Amit Dhamija", "hosp": "Ganga Ram Hospital", "cost": 540.0, "paid": "Gaurav", "remark": "Chest Xray for cough", "episode": "", "file": null}, {"id": 1781173981351, "date": "2026-06-08", "cat": "Imaging", "sub": "X-Ray", "name": "Sinus X Ray", "doc": "Dr. Amit Dhamija", "spec": "Pulmonologist", "ordered": "Dr. Amit Dhamija", "hosp": "Ganga Ram Hospital", "cost": 540.0, "paid": "Gaurav", "remark": "Severe cough", "episode": "", "file": null}, {"id": 1781173981352, "date": "2026-06-08", "cat": "Lab Test", "sub": "Blood Test", "name": "Chemo Cycle 2- Part 3", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Healthians", "cost": 1050.0, "paid": "Saurav", "remark": "Chemo was to happen on 9 June 2026 , but due to fever cancelled but blood tests were done on 8th June", "episode": "", "file": null}, {"id": 1781173981353, "date": "2026-06-02", "cat": "Treatment", "sub": "Chemotherapy", "name": "Cycle 2 - Part 2", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Athenaa", "cost": 29369.0, "paid": "Gaurav", "remark": "Cycle 2 - Part 2 of the Chemotherapy", "episode": "", "file": null}, {"id": 1781173981354, "date": "2026-06-02", "cat": "Pharmacy", "sub": "Medications", "name": "Chemo Cycle 2, Part 2 mdications", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Athenaa", "cost": 2479.0, "paid": "Saurav", "remark": "Chemo Cycle 2, Part 2, medications as per Discharge summary", "episode": "", "file": null}, {"id": 1781173981355, "date": "2026-06-01", "cat": "Lab Test", "sub": "Blood Test", "name": "Chemo Cycle 2- Part 2", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Healthians", "cost": 1050.0, "paid": "Saurav", "remark": "", "episode": "", "file": null}, {"id": 1781173981356, "date": "2026-05-27", "cat": "Consultation", "sub": "Consultation", "name": "Severe Cough", "doc": "Dr. Amit Dhamija", "spec": "Pulmonologist", "ordered": "Self", "hosp": "Ganga Ram Hospital", "cost": 1500.0, "paid": "Gaurav", "remark": "Severe cough", "episode": "", "file": null}, {"id": 1781173981357, "date": "2026-05-26", "cat": "Treatment", "sub": "Chemotherapy", "name": "Cycle 2 - Part 1", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Athenaa", "cost": 27283.0, "paid": "Gaurav", "remark": "Chemotherapy cycle 2 start", "episode": "", "file": null}, {"id": 1781173981358, "date": "2026-05-26", "cat": "Treatment", "sub": "Immunotherapy", "name": "Cycle 2", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Athenaa", "cost": 90208.0, "paid": "Gaurav", "remark": "Immunotherapy Injection is Rs 216500, Medical Loan company paid Rs. 126292", "episode": "", "file": null}, {"id": 1781173981359, "date": "2026-05-26", "cat": "Imaging", "sub": "USG", "name": "USG Breast done for review", "doc": "Dr. Jyoti", "spec": "Radiologist", "ordered": "Dr. Bhuvan", "hosp": "Athenaa", "cost": 0, "paid": "Gaurav", "remark": "Done before Chemotherapy start - Cycle 2 Part 1", "episode": "", "file": null}, {"id": 1781173981360, "date": "2026-05-26", "cat": "Pharmacy", "sub": "Medications", "name": "Chemo cycle 2 Part1 Medication", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Athenaa", "cost": 2479.0, "paid": "Saurav", "remark": "Chemo Cycle 2- Part 1, medications as per discharge summary", "episode": "", "file": null}, {"id": 1781173981361, "date": "2026-05-26", "cat": "Treatment", "sub": "Immunotherapy", "name": "Cycle 2", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Athenaa", "cost": 126292.0, "paid": "Medical Loan", "remark": "Medical Loan - Part payment by Loan Company", "episode": "", "file": null}, {"id": 1781173981362, "date": "2026-05-25", "cat": "Consultation", "sub": "Consultation", "name": "Heart Chekup", "doc": "Dr. Chandrashekhar", "spec": "Cardiologist", "ordered": "Dr. Bhuvan", "hosp": "Dr. Chandrashekhar Clinic", "cost": 4000.0, "paid": "Gaurav", "remark": "Heart checkup visit", "episode": "", "file": null}, {"id": 1781173981363, "date": "2026-05-25", "cat": "Consultation", "sub": "Consultation", "name": "Severe Cough", "doc": "Dr. Anshul Mittal", "spec": "Pulmonologist", "ordered": "Dr. Bhuvan", "hosp": "SSB Hospital", "cost": 1200.0, "paid": "Gaurav", "remark": "Sever cough", "episode": "", "file": null}, {"id": 1781173981364, "date": "2026-05-25", "cat": "Lab Test", "sub": "Blood Test", "name": "Chemo Cycle 2 - Part 1", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Healthians", "cost": 510.0, "paid": "Saurav", "remark": "", "episode": "", "file": null}, {"id": 1781173981365, "date": "2026-05-23", "cat": "Lab Test", "sub": "Blood Test", "name": "Fever - Procalcitonin and CBC", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Pharmeasy", "cost": 1597.0, "paid": "Saurav", "remark": "Fever was there, so doctor ordered these infections blood test", "episode": "", "file": null}, {"id": 1781173981366, "date": "2026-05-19", "cat": "Treatment", "sub": "Chemotherapy", "name": "Cycle 1 - Part 3", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Athenaa", "cost": 29000.0, "paid": "Gaurav", "remark": "", "episode": "", "file": null}, {"id": 1781173981367, "date": "2026-05-19", "cat": "Imaging", "sub": "ECG", "name": "Pulse was high", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Athenaa", "cost": 0, "paid": "Gaurav", "remark": "Was done during 19 May 2026 Chemo - Cycle 1 Part 3. Heart rate was high so doctor checked ECG", "episode": "", "file": null}, {"id": 1781173981368, "date": "2026-05-19", "cat": "Pharmacy", "sub": "Medications", "name": "Chemo Cycle 1- Part 3 medications", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Athenaa", "cost": 3602.0, "paid": "Saurav", "remark": "Chemo Cycle 1- Part 3 - Medications as per Discharge Summary", "episode": "", "file": null}, {"id": 1781173981369, "date": "2026-05-18", "cat": "Imaging", "sub": "PFT", "name": "PFT on advise of Pulmnologist", "doc": "Dr. Anshul", "spec": "Pulmonologist", "ordered": "Dr. Anshul", "hosp": "Ganga Ram Hospital", "cost": 2140.0, "paid": "Gaurav", "remark": "PFT for cough", "episode": "", "file": null}, {"id": 1781173981370, "date": "2026-05-18", "cat": "Imaging", "sub": "Nuclear Scan", "name": "For kidney Functioning after First chemo and 2 cycles", "doc": "Dr. Madhwi Chawla", "spec": "Radiologist", "ordered": "Dr. Bhuvan", "hosp": "Ganga Ram Hospital", "cost": 7000.0, "paid": "Gaurav", "remark": "First DTPA kidney scan after Chemo cycle 1 Part 2", "episode": "", "file": null}, {"id": 1781173981371, "date": "2026-05-18", "cat": "Lab Test", "sub": "Blood Test", "name": "CYcle 1 - Part 3", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Healthians", "cost": 1050.0, "paid": "Saurav", "remark": "", "episode": "", "file": null}, {"id": 1781173981372, "date": "2026-05-13", "cat": "Consultation", "sub": "Consultation", "name": "Severe Cough", "doc": "Dr. Anshul Mittal", "spec": "Pulmonologist", "ordered": "Dr. Bhuvan", "hosp": "SSB Hospital", "cost": 1300.0, "paid": "Gaurav", "remark": "For sever cough", "episode": "", "file": null}, {"id": 1781173981373, "date": "2026-05-13", "cat": "Consultation", "sub": "Consultation", "name": "Severe Cough", "doc": "Dr. Kalra", "spec": "Pulmonologist", "ordered": "Dr. Bhuvan", "hosp": "Max Shalimar Bagh", "cost": 1700.0, "paid": "Gaurav", "remark": "For severe cough", "episode": "", "file": null}, {"id": 1781173981374, "date": "2026-05-12", "cat": "Treatment", "sub": "Chemotherapy", "name": "Cycle 1 - Part 2", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Athenaa", "cost": 34822.0, "paid": "Gaurav", "remark": "Cycle 1 - Part 2- Weekly 2", "episode": "", "file": null}, {"id": 1781173981375, "date": "2026-05-12", "cat": "Pharmacy", "sub": "Medications", "name": "Chemo 1 - Part 2", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Athenaa", "cost": 2572.0, "paid": "Saurav", "remark": "Chemo Cycle 1- part2 Medicines as per Discharge Summary", "episode": "", "file": null}, {"id": 1781173981376, "date": "2026-05-11", "cat": "Lab Test", "sub": "Blood Test", "name": "Cycle 1- Part 2", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Healthians", "cost": 550.0, "paid": "Saurav", "remark": "", "episode": "", "file": null}, {"id": 1781173981377, "date": "2026-05-05", "cat": "Treatment", "sub": "Chemotherapy", "name": "Cycle 1 - Part 1", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Athenaa", "cost": 31000.0, "paid": "Saurav", "remark": "Chemotherapy and Immunotherapy and Chemo port installation - All 3 done same day (Rs. 31000+Rs. 216500+Rs. 118973)", "episode": "", "file": null}, {"id": 1781173981378, "date": "2026-05-05", "cat": "Treatment", "sub": "Immunotherapy", "name": "Cycle 1", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Athenaa", "cost": 216000.0, "paid": "Gaurav", "remark": "Chemotherapy and Immunotherapy and Chemo port installation - All 3 done same day (Rs. 31000+Rs. 216500+Rs. 118973)", "episode": "", "file": null}, {"id": 1781173981379, "date": "2026-05-05", "cat": "Procedure", "sub": "Chemo Port", "name": "Pre Chemo", "doc": "Dr. Aditi", "spec": "Oncologist Surgeon", "ordered": "Dr. Aditi", "hosp": "Athenaa", "cost": 118973.0, "paid": "Saurav", "remark": "Chemotherapy and Immunotherapy and Chemo port installation - All 3 done same day (Rs. 31000+Rs. 216500+Rs. 118973)", "episode": "", "file": null}, {"id": 1781173981380, "date": "2026-05-05", "cat": "Imaging", "sub": "X-Ray", "name": "Chest X Ray", "doc": "Dr. Aditi", "spec": "Oncologist Surgeon", "ordered": "Dr. Aditi", "hosp": "Athenaa", "cost": 0, "paid": "Gaurav", "remark": "Chest X-Ray done after chemo port installation", "episode": "", "file": null}, {"id": 1781173981381, "date": "2026-05-05", "cat": "Pharmacy", "sub": "Medications", "name": "Chemo cycle 1 - Part 1", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Athenaa", "cost": 2684.0, "paid": "Saurav", "remark": "Medications as per Discharge summary - Chemo 1 Part 1", "episode": "", "file": null}, {"id": 1781173981382, "date": "2026-05-04", "cat": "Consultation", "sub": "Consultation", "name": "Oncologist Surgeon", "doc": "Dr. Aditi", "spec": "Oncologist Surgeon", "ordered": "Self", "hosp": "Athenaa", "cost": 2000.0, "paid": "Gaurav", "remark": "For FNAC of Neck area Leison decision was taken to go ahead with FNAC", "episode": "", "file": null}, {"id": 1781173981383, "date": "2026-05-04", "cat": "Lab Test", "sub": "FNAC", "name": "Fnac of Neck region", "doc": "Dr. Jyoti", "spec": "Radiologist", "ordered": "Dr. Bhuvan", "hosp": "Athenaa", "cost": 11200.0, "paid": "Saurav", "remark": "Report received on 5 May and first chemo also given on 5 May 2026", "episode": "", "file": null}, {"id": 1781173981384, "date": "2026-05-03", "cat": "Lab Test", "sub": "Blood Test", "name": "Pre Chemo First blood test, for Cycle 1 Part 1", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Healthians", "cost": 1300.0, "paid": "Saurav", "remark": "", "episode": "", "file": null}, {"id": 1781173981385, "date": "2026-05-01", "cat": "Consultation", "sub": "Consultation", "name": "Cardiologist Visit", "doc": "Dr. Chandrashekhar", "spec": "Cardiologist", "ordered": "Dr. Bhuvan", "hosp": "Dr. Chandrashekhar Clinic", "cost": 4000.0, "paid": "Gaurav", "remark": "Visit + Echo report taken for upcoming chemo Preparation", "episode": "", "file": null}, {"id": 1781173981386, "date": "2026-05-01", "cat": "Imaging", "sub": "Echo", "name": "2D Echo", "doc": "Dr. Chandrashekhar", "spec": "Cardiologist", "ordered": "Dr. Bhuvan", "hosp": "Dr. Chandrashekhar Clinic", "cost": 2000.0, "paid": "Gaurav", "remark": "Visit & Echo done", "episode": "", "file": null}, {"id": 1781173981387, "date": "2026-04-30", "cat": "Consultation", "sub": "Consultation", "name": "Oncologist 2 opinion", "doc": "Dr. Amit Bhargava", "spec": "Oncologist", "ordered": "Self", "hosp": "Medanta", "cost": 2000.0, "paid": "Saurav", "remark": "second opinion oncologist visit", "episode": "", "file": null}, {"id": 1781173981388, "date": "2026-04-30", "cat": "Consultation", "sub": "Consultation", "name": "Third opinion oncologist", "doc": "Dr. Vineet Govinda Gupta", "spec": "Oncologist", "ordered": "Self", "hosp": "Dr. Vineet Clinic", "cost": 800.0, "paid": "Saurav", "remark": "Third opinion", "episode": "", "file": null}, {"id": 1781173981389, "date": "2026-04-30", "cat": "Consultation", "sub": "Consultation", "name": "Oncologist Medical second visit", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Bhuvan", "hosp": "Athenaa", "cost": 2000.0, "paid": "Gaurav", "remark": "Follow Up visit for finalising the oncologist for whole treatment", "episode": "", "file": null}, {"id": 1781173981390, "date": "2026-04-29", "cat": "Consultation", "sub": "Consultation", "name": "Oncologist Medical", "doc": "Dr. Bhuvan", "spec": "Oncologist", "ordered": "Dr. Aditi", "hosp": "Athenaa", "cost": 2000.0, "paid": "Gaurav", "remark": "Dr. Aditi referred Dr. bhuvan", "episode": "", "file": null}, {"id": 1781173981391, "date": "2026-04-28", "cat": "Consultation", "sub": "Consultation", "name": "Oncologist Surgeon second visist", "doc": "Dr. Aditi", "spec": "Oncologist Surgeon", "ordered": "Dr. Aditi", "hosp": "Athenaa", "cost": 2000.0, "paid": "Gaurav", "remark": "Second visit to Dr aditi", "episode": "", "file": null}, {"id": 1781173981392, "date": "2026-04-28", "cat": "Imaging", "sub": "PET Scan", "name": "First PET Scan", "doc": "Dr. Darshit Jain", "spec": "Radiologist", "ordered": "Dr. Aditi", "hosp": "Saral Diagnostics", "cost": 19000.0, "paid": "Gaurav", "remark": "First PET Scan, report available on 30 April 2026", "episode": "", "file": null}, {"id": 1781173981393, "date": "2026-04-22", "cat": "Imaging", "sub": "MRI", "name": "MRI 1", "doc": "Dr. Jyoti", "spec": "Radiologist", "ordered": "Dr. Aditi", "hosp": "Athenaa", "cost": 13000.0, "paid": "Gaurav", "remark": "Reports on 23 April 2026", "episode": "", "file": null}, {"id": 1781173981394, "date": "2026-04-22", "cat": "Consultation", "sub": "Consultation", "name": "Oncologist Surgeon", "doc": "Dr. Aditi", "spec": "Oncologist Surgeon", "ordered": "Self", "hosp": "Athenaa", "cost": 2000.0, "paid": "Gaurav", "remark": "First visit to Dr. Aditi - referred by dr Anshul", "episode": "", "file": null}, {"id": 1781173981395, "date": "2026-04-22", "cat": "Lab Test", "sub": "Biopsy", "name": "Right Breast Biopsy", "doc": "Dr. Jyoti", "spec": "Radiologist", "ordered": "Dr. Aditi", "hosp": "Athenaa", "cost": 19730.0, "paid": "Gaurav", "remark": "", "episode": "", "file": null}, {"id": 1781173981396, "date": "2026-04-22", "cat": "Lab Test", "sub": "FNAC", "name": "FNAC Breast and adjoining shoulder nodes", "doc": "Dr. Jyoti", "spec": "Radiologist", "ordered": "Dr. Aditi", "hosp": "Athenaa", "cost": 11200.0, "paid": "Gaurav", "remark": "", "episode": "", "file": null}, {"id": 1781173981397, "date": "2026-04-20", "cat": "Consultation", "sub": "Consultation", "name": "Oncologist first visit", "doc": "Dr. Shyam Aggarwal", "spec": "Oncologist", "ordered": "Self", "hosp": "Ganga Ram Hospital", "cost": 2000.0, "paid": "Gaurav", "remark": "First Oncologist Visit", "episode": "", "file": null}, {"id": 1781173981398, "date": "2026-04-20", "cat": "Imaging", "sub": "Mammography", "name": "Mamography 2", "doc": "Dr. Sonia", "spec": "Radiologist", "ordered": "Self", "hosp": "Ganga Ram Hospital", "cost": 7390.0, "paid": "Gaurav", "remark": "Second Mamography to confirm Birad 5", "episode": "", "file": null}, {"id": 1781173981399, "date": "2026-04-18", "cat": "Imaging", "sub": "Mammography", "name": "Mamography 1", "doc": "Dr. Madhu", "spec": "Radiologist", "ordered": "Self", "hosp": "Dr Madhu Lab", "cost": 4000.0, "paid": "Gaurav", "remark": "Routine preventive checkup", "episode": "", "file": null}];
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
+// If opened via a shared link, show the read-only blood viewer and stop.
+if(checkForSharedData()){
+  // Doctor view — don't load the personal app behind it
+} else {
 loadData();
 loadBlood();
+loadNotes();
 document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
 buildCatSelect();
 onCatChange();
@@ -1347,6 +1806,7 @@ updateHeader();
 nav('summary');
 var cid=localStorage.getItem('gdrive_client_id');
 if(cid) initGIS(cid);
+}
 </script>
 </body>
 </html>
