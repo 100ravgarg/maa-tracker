@@ -544,6 +544,7 @@ function migrateEntry(e){
 function saveData(){
   try{ localStorage.setItem('maa_tracker',JSON.stringify(entries)); }catch(e){}
   try{ localStorage.setItem('maa_customsubs',JSON.stringify(customSubs)); }catch(e){}
+  if(typeof autoSync==='function' && !window._applyingSync) autoSync();
 }
 // Collect distinct values for autocomplete
 function distinct(field){
@@ -561,7 +562,7 @@ var NOTE_TYPES = {
 function loadNotes(){
   try{ var s=localStorage.getItem('maa_notes'); if(s) notes=JSON.parse(s); }catch(e){}
 }
-function saveNotes(){ try{ localStorage.setItem('maa_notes',JSON.stringify(notes)); }catch(e){} }
+function saveNotes(){ try{ localStorage.setItem('maa_notes',JSON.stringify(notes)); }catch(e){} if(typeof autoSync==='function' && !window._applyingSync) autoSync(); }
 
 function newNote(){
   editingNoteId = null;
@@ -1139,7 +1140,168 @@ function setupTC(cid){
 }
 function gSignIn(){if(window._gTC)window._gTC.requestAccessToken({prompt:''});else{var c=localStorage.getItem('gdrive_client_id');if(c)initGIS(c);}}
 function gSignOut(){if(window._gToken)google.accounts.oauth2.revoke(window._gToken,function(){});window._gToken=null;renderSettings();}
-function gSync(){ /* simplified — full sync runs on token callback */ if(!window._gToken){gSignIn();return;} toast('Syncing…'); }
+
+// ─── REAL GOOGLE DRIVE SYNC ───────────────────────────────────────────────────
+var GD_FILENAME = 'maa_tracker_data.json';
+var _gFileId = null;
+
+// Gather all app data into one object
+function collectAllData(){
+  return {
+    entries: entries,
+    customSubs: customSubs,
+    notes: notes,
+    bloodReports: bloodReports,
+    customParams: customParams,
+    customLabs: customLabs,
+    keyOverrides: keyOverrides,
+    sectionOrder: sectionOrder,
+    savedAt: Date.now()
+  };
+}
+// Apply a downloaded data object into the app + localStorage
+function applyAllData(d){
+  if(!d) return;
+  window._applyingSync = true;
+  if(d.entries){ entries = d.entries.map(migrateEntry); entries.sort(function(a,b){return b.date.localeCompare(a.date);}); }
+  if(d.customSubs) customSubs = d.customSubs;
+  if(d.notes) notes = d.notes;
+  if(d.bloodReports) bloodReports = d.bloodReports;
+  if(d.customParams) customParams = d.customParams;
+  if(d.customLabs) customLabs = d.customLabs;
+  if(d.keyOverrides) keyOverrides = d.keyOverrides;
+  if(d.sectionOrder) sectionOrder = d.sectionOrder;
+  saveData(); saveNotes(); saveBlood();
+  window._applyingSync = false;
+}
+// Merge two data sets — union by id, keeping the newest. Prevents data loss.
+function mergeData(local, remote){
+  if(!remote) return local;
+  if(!local) return remote;
+  function mergeById(a, b){
+    var map = {};
+    (a||[]).forEach(function(x){ map[x.id] = x; });
+    (b||[]).forEach(function(x){ if(!map[x.id]) map[x.id] = x; });
+    return Object.keys(map).map(function(k){ return map[k]; });
+  }
+  function mergeReports(a, b){
+    // blood reports keyed by date+lab
+    var map = {};
+    (a||[]).forEach(function(r){ map[r.date+'|'+(r.lab||'')] = r; });
+    (b||[]).forEach(function(r){ var k=r.date+'|'+(r.lab||''); if(!map[k]) map[k]=r; });
+    return Object.keys(map).map(function(k){ return map[k]; });
+  }
+  return {
+    entries: mergeById(local.entries, remote.entries),
+    notes: mergeById(local.notes, remote.notes),
+    bloodReports: mergeReports(local.bloodReports, remote.bloodReports),
+    // For settings-like data, prefer whichever was saved most recently
+    customSubs: (remote.savedAt>local.savedAt? remote.customSubs : local.customSubs) || local.customSubs || remote.customSubs,
+    customParams: (remote.savedAt>local.savedAt? remote.customParams : local.customParams) || local.customParams || remote.customParams,
+    customLabs: (remote.savedAt>local.savedAt? remote.customLabs : local.customLabs) || local.customLabs || remote.customLabs,
+    keyOverrides: (remote.savedAt>local.savedAt? remote.keyOverrides : local.keyOverrides) || local.keyOverrides || remote.keyOverrides,
+    sectionOrder: (remote.savedAt>local.savedAt? remote.sectionOrder : local.sectionOrder) || local.sectionOrder || remote.sectionOrder,
+    savedAt: Date.now()
+  };
+}
+
+function gApi(path, opts){
+  opts = opts || {};
+  opts.headers = opts.headers || {};
+  opts.headers['Authorization'] = 'Bearer ' + window._gToken;
+  return fetch('https://www.googleapis.com/' + path, opts);
+}
+
+// Find the data file id in the appDataFolder (or null)
+function gFindFile(cb){
+  if(_gFileId){ cb(_gFileId); return; }
+  gApi('drive/v3/files?spaces=appDataFolder&fields=files(id,name)&q=' + encodeURIComponent("name='"+GD_FILENAME+"'"))
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      if(j.files && j.files.length){ _gFileId = j.files[0].id; cb(_gFileId); }
+      else cb(null);
+    })
+    .catch(function(){ cb(null); });
+}
+
+// Download remote data (or null)
+function gDownload(cb){
+  gFindFile(function(id){
+    if(!id){ cb(null); return; }
+    gApi('drive/v3/files/' + id + '?alt=media')
+      .then(function(r){ return r.json(); })
+      .then(function(j){ cb(j); })
+      .catch(function(){ cb(null); });
+  });
+}
+
+// Upload current data (create or update)
+function gUpload(dataObj, cb){
+  var body = JSON.stringify(dataObj);
+  gFindFile(function(id){
+    if(id){
+      // update existing
+      fetch('https://www.googleapis.com/upload/drive/v3/files/' + id + '?uploadType=media', {
+        method:'PATCH',
+        headers:{'Authorization':'Bearer '+window._gToken,'Content-Type':'application/json'},
+        body: body
+      }).then(function(r){ cb(r.ok); }).catch(function(){ cb(false); });
+    } else {
+      // create new in appDataFolder (multipart: metadata + content)
+      var boundary = 'maaBoundary'+Date.now();
+      var meta = {name: GD_FILENAME, parents:['appDataFolder']};
+      var multipart =
+        '--'+boundary+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify(meta)+
+        '\r\n--'+boundary+'\r\nContent-Type: application/json\r\n\r\n'+body+
+        '\r\n--'+boundary+'--';
+      fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+        method:'POST',
+        headers:{'Authorization':'Bearer '+window._gToken,'Content-Type':'multipart/related; boundary='+boundary},
+        body: multipart
+      }).then(function(r){ return r.json(); }).then(function(j){ if(j.id){_gFileId=j.id;} cb(!!j.id); }).catch(function(){ cb(false); });
+    }
+  });
+}
+
+// Main sync: download remote, merge with local, save merged, upload merged, refresh UI
+function gSync(){
+  if(!window._gToken){ gSignIn(); return; }
+  toast('Syncing…');
+  gDownload(function(remote){
+    var local = collectAllData();
+    var merged = mergeData(local, remote);
+    applyAllData(merged);
+    gUpload(merged, function(ok){
+      if(ok){
+        toast('✓ Synced');
+        // Refresh whatever page is showing
+        if(curPage==='summary') renderSummary();
+        else if(curPage==='timeline'){ buildChips(); renderTimeline(); }
+        else if(curPage==='blood') renderBloodPage();
+        else if(curPage==='expenses') renderExpenses();
+        else if(curPage==='notes') renderNotes();
+        updateHeader(); refreshDatalists();
+      } else {
+        toast('Sync upload failed — try again');
+      }
+    });
+  });
+}
+
+// Debounced auto-sync after data changes (only if signed in)
+var _autoSyncTimer = null;
+function autoSync(){
+  if(!window._gToken) return;  // only when signed in
+  if(_autoSyncTimer) clearTimeout(_autoSyncTimer);
+  _autoSyncTimer = setTimeout(function(){
+    // Upload current local data (merge-safe) without the full toast dance
+    gDownload(function(remote){
+      var merged = mergeData(collectAllData(), remote);
+      applyAllData(merged);
+      gUpload(merged, function(){});
+    });
+  }, 1500);
+}
 
 var BLOOD_PARAMS=[["Haemoglobin (Hb)", "g/dL", "12.0 – 15.0", "HAEMATOLOGY — COMPLETE BLOOD COUNT", 1], ["Total Leucocyte Count (TLC)", "10³/µL", "4.0 – 10.0", "HAEMATOLOGY — COMPLETE BLOOD COUNT", 1], ["Red Blood Cell Count (RBC)", "10⁶/µL", "3.80 – 4.80", "HAEMATOLOGY — COMPLETE BLOOD COUNT", 1], ["Haematocrit (PCV)", "%", "36.0 – 46.0", "HAEMATOLOGY — COMPLETE BLOOD COUNT", 1], ["Mean Corpuscular Volume (MCV)", "fL", "83.0 – 101.0", "HAEMATOLOGY — COMPLETE BLOOD COUNT", 0], ["Mean Corpuscular Hb (MCH)", "pg", "27.0 – 32.0", "HAEMATOLOGY — COMPLETE BLOOD COUNT", 0], ["Mean Corpuscular Hb Conc (MCHC)", "g/dL", "31.5 – 34.5", "HAEMATOLOGY — COMPLETE BLOOD COUNT", 0], ["RDW – CV", "%", "11.6 – 14.0", "HAEMATOLOGY — COMPLETE BLOOD COUNT", 0], ["RDW – SD", "fL", "39.0 – 46.0", "HAEMATOLOGY — COMPLETE BLOOD COUNT", 0], ["Mentzer Index", "ratio", "", "HAEMATOLOGY — COMPLETE BLOOD COUNT", 0], ["RDW Index (RDWI)", "ratio", "", "HAEMATOLOGY — COMPLETE BLOOD COUNT", 0], ["Green & King Index", "ratio", "", "HAEMATOLOGY — COMPLETE BLOOD COUNT", 0], ["PROCALCITONIN", "ng/mL", "31.5 – 34.5", "INFECTION", 0], ["Neutrophils", "%", "40 – 80", "DIFFERENTIAL LEUCOCYTE COUNT", 0], ["Lymphocytes", "%", "20 – 40", "DIFFERENTIAL LEUCOCYTE COUNT", 0], ["Monocytes", "%", "2 – 10", "DIFFERENTIAL LEUCOCYTE COUNT", 0], ["Eosinophils", "%", "1 – 6", "DIFFERENTIAL LEUCOCYTE COUNT", 0], ["Basophils", "%", "0 – 2", "DIFFERENTIAL LEUCOCYTE COUNT", 0], ["Absolute Neutrophil Count (ANC)", "10³/µL", "2.0 – 7.0", "ABSOLUTE LEUCOCYTE COUNTS", 1], ["Absolute Lymphocyte Count (ALC)", "10³/µL", "1.0 – 3.0", "ABSOLUTE LEUCOCYTE COUNTS", 1], ["Absolute Monocyte Count", "10³/µL", "0.2 – 1.0", "ABSOLUTE LEUCOCYTE COUNTS", 0], ["Absolute Eosinophil Count (AEC)", "10³/µL", "0.02 – 0.5", "ABSOLUTE LEUCOCYTE COUNTS", 0], ["Absolute Basophil Count", "10³/µL", "0.02 – 0.10", "ABSOLUTE LEUCOCYTE COUNTS", 0], ["Platelet Count (PLT)", "10³/µL", "150 – 410", "PLATELETS", 1], ["Mean Platelet Volume (MPV)", "fL", "7 – 9", "PLATELETS", 0], ["Glucose, Fasting (FBS)", "mg/dL", "70 – 100", "BLOOD SUGAR", 1], ["Total Cholesterol", "mg/dL", "Desirable: <200", "LIPIDS", 1], ["Triglycerides", "mg/dL", "Desirable: <150", "LIPIDS", 1], ["Serum Iron", "µg/dL", "60 – 180", "IRON STUDIES", 1], ["Bilirubin, Total", "mg/dL", "0.3 – 1.2", "LIVER FUNCTION TEST", 1], ["Bilirubin, Direct", "mg/dL", "0 – 0.2", "LIVER FUNCTION TEST", 1], ["Bilirubin, Indirect", "mg/dL", "0.0 – 0.8", "LIVER FUNCTION TEST", 0], ["AST (SGOT)", "U/L", "3 – 35", "LIVER FUNCTION TEST", 1], ["ALT (SGPT)", "U/L", "3 – 35", "LIVER FUNCTION TEST", 1], ["Alkaline Phosphatase (ALP)", "U/L", "33 – 98", "LIVER FUNCTION TEST", 1], ["Gamma GT (GGT)", "U/L", "5 – 38", "LIVER FUNCTION TEST", 1], ["Total Protein", "g/dL", "6.6 – 8.3", "LIVER FUNCTION TEST", 1], ["Albumin", "g/dL", "3.5 – 5.2", "LIVER FUNCTION TEST", 1], ["Globulin", "g/dL", "3.0 – 4.2", "LIVER FUNCTION TEST", 1], ["Albumin / Globulin Ratio", "ratio", "1.2 – 2.5", "LIVER FUNCTION TEST", 0], ["SGOT / SGPT Ratio", "ratio", "0.7 – 1.4", "LIVER FUNCTION TEST", 0], ["Creatinine", "mg/dL", "0.6 – 1.3", "KIDNEY FUNCTION", 1], ["eGFR (CKD-EPI)", "mL/min/1.73m²", "", "KIDNEY FUNCTION", 1], ["DTPA GFR", "mL/min", "", "KIDNEY FUNCTION", 1], ["Blood Urea", "mg/dL", "17 – 43", "KIDNEY FUNCTION", 1], ["Blood Urea Nitrogen (BUN)", "mg/dL", "8 – 20", "KIDNEY FUNCTION", 0], ["BUN / Creatinine Ratio", "ratio", "", "KIDNEY FUNCTION", 0], ["Urea / Creatinine Ratio", "ratio", "", "KIDNEY FUNCTION", 0], ["Uric Acid", "mg/dL", "2.6 – 6.0", "KIDNEY FUNCTION", 1], ["Calcium", "mg/dL", "8.8 – 10.6", "ELECTROLYTES", 1], ["Phosphorus", "mg/dL", "2.5 – 4.5", "ELECTROLYTES", 1], ["Sodium", "mmol/L", "136 – 146", "ELECTROLYTES", 1], ["Potassium", "mmol/L", "3.5 – 5.5", "ELECTROLYTES", 1], ["Chloride", "mmol/L", "101 – 109", "ELECTROLYTES", 1], ["NT-proBNP", "pg/mL", "<320", "CARDIAC MARKER", 1], ["aPTT — Patient Value", "sec", "25.7 – 37.3", "COAGULATION", 0], ["aPTT — Control Value", "sec", "", "COAGULATION", 0], ["aPTT — Ratio", "ratio", "0.82 – 1.18", "COAGULATION", 0], ["Prothrombin Time (PT)", "sec", "8.9 – 13.3", "COAGULATION", 0], ["PT — Control (MNPT)", "sec", "", "COAGULATION", 0], ["PT — Ratio", "ratio", "", "COAGULATION", 0], ["INR", "ratio", "0.80 – 1.16", "COAGULATION", 0], ["Thyroxine, Total (T4)", "µg/dL", "5.48 – 14.28", "THYROID & HORMONES", 0], ["Free T3 (FT3)", "pg/mL", "2.5 – 3.9", "THYROID & HORMONES", 0], ["Free T4 (FT4)", "ng/dL", "0.61 – 1.12", "THYROID & HORMONES", 0], ["TSH (Ultrasensitive)", "µIU/mL", "0.38 – 5.33", "THYROID & HORMONES", 1], ["Cortisol (morning sample)", "µg/dL", "5.27 – 22.45 (7–9 am)", "THYROID & HORMONES", 0], ["Colour", "", "Pale Yellow", "URINE — ROUTINE EXAMINATION", 0], ["Appearance", "", "Clear", "URINE — ROUTINE EXAMINATION", 0], ["Volume", "mL", "", "URINE — ROUTINE EXAMINATION", 0], ["Specific Gravity", "", "1.001 – 1.035", "URINE — ROUTINE EXAMINATION", 0], ["pH", "", "4.5 – 7.5", "URINE — ROUTINE EXAMINATION", 0], ["Glucose (Urine)", "", "Negative", "URINE — ROUTINE EXAMINATION", 0], ["Protein (Urine)", "", "Negative", "URINE — ROUTINE EXAMINATION", 0], ["Ketones", "", "Negative", "URINE — ROUTINE EXAMINATION", 0], ["Urobilinogen", "", "Normal", "URINE — ROUTINE EXAMINATION", 0], ["Bilirubin (Urine)", "", "Negative", "URINE — ROUTINE EXAMINATION", 0], ["Nitrite", "", "Negative", "URINE — ROUTINE EXAMINATION", 0], ["Blood (Urine)", "", "Nil", "URINE — ROUTINE EXAMINATION", 0], ["Leucocyte Esterase", "", "Nil", "URINE — ROUTINE EXAMINATION", 0], ["Pus Cells", "/HPF", "0 – 5", "URINE — MICROSCOPY", 0], ["Epithelial Cells", "/HPF", "0 – 5", "URINE — MICROSCOPY", 0], ["RBCs (Urine)", "/HPF", "Nil", "URINE — MICROSCOPY", 0], ["Casts", "", "Nil", "URINE — MICROSCOPY", 0], ["Crystals", "", "Nil", "URINE — MICROSCOPY", 0], ["Bacteria", "", "Absent", "URINE — MICROSCOPY", 0], ["Yeast Cells", "", "Absent", "URINE — MICROSCOPY", 0], ["Others (Non-specific)", "", "Nil", "URINE — MICROSCOPY", 0]];
 var BLOOD_SEED=[{"date": "2026-06-08", "lab": "Hlth", "values": {"Haemoglobin (Hb)": 10.6, "Total Leucocyte Count (TLC)": 4.1, "Red Blood Cell Count (RBC)": 3.43, "Haematocrit (PCV)": 31, "Mean Corpuscular Volume (MCV)": 90.2, "Mean Corpuscular Hb (MCH)": 30.9, "Mean Corpuscular Hb Conc (MCHC)": 34.2, "RDW – CV": 16.2, "RDW – SD": 49, "Mentzer Index": 26.3, "RDW Index (RDWI)": 426.02, "Green & King Index": 124, "Neutrophils": 56.2, "Lymphocytes": 34, "Monocytes": 8.4, "Eosinophils": 1.2, "Basophils": 0.2, "Absolute Neutrophil Count (ANC)": 2.28, "Absolute Lymphocyte Count (ALC)": 1.38, "Absolute Monocyte Count": 0.34, "Absolute Eosinophil Count (AEC)": 0.05, "Absolute Basophil Count": 0.01, "Platelet Count (PLT)": 197, "Mean Platelet Volume (MPV)": 9.5, "Glucose, Fasting (FBS)": 92, "Total Cholesterol": 122, "Triglycerides": 61, "Serum Iron": 183, "Bilirubin, Total": 0.62, "Bilirubin, Direct": 0.11, "Bilirubin, Indirect": 0.51, "AST (SGOT)": 36, "ALT (SGPT)": 38.7, "Alkaline Phosphatase (ALP)": 69, "Gamma GT (GGT)": 20, "Total Protein": 6.16, "Albumin": 3.81, "Globulin": 2.35, "Albumin / Globulin Ratio": 1.62, "SGOT / SGPT Ratio": 0.93, "Creatinine": 0.7, "eGFR (CKD-EPI)": 99.57, "Blood Urea": 26.4, "Blood Urea Nitrogen (BUN)": 12.3, "BUN / Creatinine Ratio": 17.63, "Urea / Creatinine Ratio": 37.71, "Uric Acid": 3.7, "Calcium": 8, "Phosphorus": 1.8, "Sodium": 125, "Potassium": 4.25, "Chloride": 90, "NT-proBNP": 105, "Colour": "Pale Yellow", "Appearance": "Clear", "Volume": 15, "Specific Gravity": 1.005, "pH": 6, "Glucose (Urine)": "Trace*", "Protein (Urine)": "Negative", "Ketones": "Negative", "Urobilinogen": "Normal", "Bilirubin (Urine)": "Negative", "Nitrite": "Negative", "Blood (Urine)": "Negative", "Leucocyte Esterase": "Negative", "Pus Cells": "1-2", "Epithelial Cells": "1-2", "RBCs (Urine)": "Nil", "Casts": "Nil", "Crystals": "Nil", "Bacteria": "Absent", "Yeast Cells": "Absent", "Others (Non-specific)": "Nil"}}, {"date": "2026-06-01", "lab": "Hlth", "values": {"Haemoglobin (Hb)": 10.5, "Total Leucocyte Count (TLC)": 4, "Red Blood Cell Count (RBC)": 3.4, "Haematocrit (PCV)": 30.6, "Mean Corpuscular Volume (MCV)": 88.8, "Mean Corpuscular Hb (MCH)": 30.4, "Mean Corpuscular Hb Conc (MCHC)": 34.3, "RDW – CV": 14.5, "RDW – SD": 45.9, "Mentzer Index": 26.12, "RDW Index (RDWI)": 378.71, "Green & King Index": 109, "Neutrophils": 52.2, "Lymphocytes": 33.8, "Monocytes": 10, "Eosinophils": 3.3, "Basophils": 0.7, "Absolute Neutrophil Count (ANC)": 2.09, "Absolute Lymphocyte Count (ALC)": 1.35, "Absolute Monocyte Count": 0.4, "Absolute Eosinophil Count (AEC)": 0.13, "Absolute Basophil Count": 0.03, "Platelet Count (PLT)": 156, "Mean Platelet Volume (MPV)": 8.4, "Glucose, Fasting (FBS)": 91, "Total Cholesterol": 142, "Triglycerides": 88, "Serum Iron": 65, "Bilirubin, Total": 0.46, "Bilirubin, Direct": 0.08, "Bilirubin, Indirect": 0.38, "AST (SGOT)": 25, "ALT (SGPT)": 26, "Alkaline Phosphatase (ALP)": 70, "Gamma GT (GGT)": 21, "Total Protein": 6.19, "Albumin": 3.53, "Globulin": 2.66, "Albumin / Globulin Ratio": 1.33, "SGOT / SGPT Ratio": 0.96, "Creatinine": 0.7, "eGFR (CKD-EPI)": 99.57, "Blood Urea": 25.7, "Blood Urea Nitrogen (BUN)": 12, "BUN / Creatinine Ratio": 17.16, "Urea / Creatinine Ratio": 36.71, "Uric Acid": 3.4, "Calcium": 8.1, "Phosphorus": 1.3, "Sodium": 130, "Potassium": 4.43, "Chloride": 99, "NT-proBNP": 408, "Colour": "Pale Yellow", "Appearance": "Clear", "Volume": 15, "Specific Gravity": 1.01, "pH": 8.5, "Glucose (Urine)": "Trace*", "Protein (Urine)": "Negative", "Ketones": "Negative", "Urobilinogen": "Normal", "Bilirubin (Urine)": "Negative", "Nitrite": "Negative", "Blood (Urine)": "Negative", "Leucocyte Esterase": "Negative", "Pus Cells": "1-2", "Epithelial Cells": "1-2", "RBCs (Urine)": "Nil", "Casts": "Nil", "Crystals": "Nil", "Bacteria": "Absent", "Yeast Cells": "Absent", "Others (Non-specific)": "Nil"}}, {"date": "2026-05-25", "lab": "Hlth", "values": {"Haemoglobin (Hb)": 11.8, "Total Leucocyte Count (TLC)": 3.6, "Red Blood Cell Count (RBC)": 3.84, "Haematocrit (PCV)": 35.6, "Mean Corpuscular Volume (MCV)": 92.7, "Mean Corpuscular Hb (MCH)": 30.7, "Mean Corpuscular Hb Conc (MCHC)": 33.2, "RDW – CV": 13.7, "RDW – SD": 43.1, "Mentzer Index": 24.14, "RDW Index (RDWI)": 330.73, "Green & King Index": 100, "Neutrophils": 58.6, "Lymphocytes": 31.3, "Monocytes": 8.6, "Eosinophils": 1.4, "Basophils": 0.1, "Absolute Neutrophil Count (ANC)": 2.12, "Absolute Lymphocyte Count (ALC)": 1.13, "Absolute Monocyte Count": 0.31, "Absolute Eosinophil Count (AEC)": 0.05, "Absolute Basophil Count": 0, "Platelet Count (PLT)": 209, "Mean Platelet Volume (MPV)": 9.1, "Glucose, Fasting (FBS)": 97.6, "Total Cholesterol": 153.8, "Triglycerides": 70.6, "Serum Iron": 49.3, "Bilirubin, Total": 0.61, "Bilirubin, Direct": 0.11, "Bilirubin, Indirect": 0.5, "AST (SGOT)": 20.9, "ALT (SGPT)": 26, "Alkaline Phosphatase (ALP)": 57, "Gamma GT (GGT)": 17.3, "Total Protein": 6.55, "Albumin": 3.77, "Globulin": 2.78, "Albumin / Globulin Ratio": 1.36, "SGOT / SGPT Ratio": 0.8, "Creatinine": 0.89, "eGFR (CKD-EPI)": 74.64, "Blood Urea": 32.8, "Blood Urea Nitrogen (BUN)": 15.3, "BUN / Creatinine Ratio": 17.22, "Urea / Creatinine Ratio": 36.85, "Uric Acid": 3.6, "Calcium": 9.6, "Phosphorus": 4.3, "Sodium": 135, "Potassium": 4.53, "Chloride": 100, "Colour": "Pale Yellow", "Appearance": "Clear", "Volume": 15, "Specific Gravity": 1.015, "pH": 7.5, "Glucose (Urine)": "Trace*", "Protein (Urine)": "Negative", "Ketones": "Negative", "Urobilinogen": "Normal", "Bilirubin (Urine)": "Negative", "Nitrite": "Negative", "Blood (Urine)": "Negative", "Leucocyte Esterase": "Negative", "Pus Cells": "1-2", "Epithelial Cells": "2-3", "RBCs (Urine)": "Nil", "Casts": "Nil", "Crystals": "Nil", "Bacteria": "Absent", "Yeast Cells": "Absent", "Others (Non-specific)": "Nil"}}, {"date": "2026-05-23", "lab": "PharmE", "values": {"Haemoglobin (Hb)": 12.5, "Total Leucocyte Count (TLC)": 9.91, "Red Blood Cell Count (RBC)": 4.13, "Haematocrit (PCV)": 36.9, "Mean Corpuscular Volume (MCV)": 89.3, "Mean Corpuscular Hb (MCH)": 30.3, "Mean Corpuscular Hb Conc (MCHC)": 33.9, "RDW – CV": 14.4, "RDW – SD": 46.2, "Mentzer Index": 21.6, "RDW Index (RDWI)": 311.4, "PROCALCITONIN": 0.02, "Neutrophils": 89.2, "Lymphocytes": 8.4, "Monocytes": 1, "Eosinophils": 0.5, "Basophils": 0.6, "Absolute Neutrophil Count (ANC)": 8.84, "Absolute Lymphocyte Count (ALC)": 0.83, "Absolute Monocyte Count": 0.1, "Absolute Eosinophil Count (AEC)": 0.05, "Absolute Basophil Count": 0.06, "Platelet Count (PLT)": 248, "Mean Platelet Volume (MPV)": 10.4, "Colour": "Pale Yellow", "Appearance": "Clear", "Volume": 15, "Specific Gravity": 1.015, "pH": 6.5, "Glucose (Urine)": "Trace*", "Protein (Urine)": "Negative", "Ketones": "Negative", "Urobilinogen": "Normal", "Bilirubin (Urine)": "Negative", "Nitrite": "Negative", "Blood (Urine)": "Negative", "Leucocyte Esterase": "Negative", "Pus Cells": "1-2", "Epithelial Cells": "2-3", "RBCs (Urine)": "Nil", "Casts": "Nil", "Crystals": "Nil", "Bacteria": "Absent", "Yeast Cells": "Absent", "Others (Non-specific)": "Nil"}}, {"date": "2026-05-18", "lab": "Hlth", "values": {"Haemoglobin (Hb)": 12.9, "Total Leucocyte Count (TLC)": 3.2, "Red Blood Cell Count (RBC)": 4.17, "Haematocrit (PCV)": 37.3, "Mean Corpuscular Volume (MCV)": 89.4, "Mean Corpuscular Hb (MCH)": 30.8, "Mean Corpuscular Hb Conc (MCHC)": 34.5, "RDW – CV": 13.5, "RDW – SD": 42.4, "Mentzer Index": 21.44, "RDW Index (RDWI)": 289.42, "Green & King Index": 84, "Neutrophils": 42.8, "Lymphocytes": 51.4, "Monocytes": 4, "Eosinophils": 1.7, "Basophils": 0.1, "Absolute Neutrophil Count (ANC)": 1.38, "Absolute Lymphocyte Count (ALC)": 1.66, "Absolute Monocyte Count": 0.13, "Absolute Eosinophil Count (AEC)": 0.05, "Absolute Basophil Count": 0, "Platelet Count (PLT)": 263, "Mean Platelet Volume (MPV)": 9.2, "Glucose, Fasting (FBS)": 77.9, "Total Cholesterol": 179, "Triglycerides": 77, "Serum Iron": 59, "Bilirubin, Total": 0.42, "Bilirubin, Direct": 0.05, "Bilirubin, Indirect": 0.37, "AST (SGOT)": 23, "ALT (SGPT)": 36, "Alkaline Phosphatase (ALP)": 66, "Gamma GT (GGT)": 21, "Total Protein": 6.09, "Albumin": 3.81, "Globulin": 2.28, "Albumin / Globulin Ratio": 1.67, "SGOT / SGPT Ratio": 0.64, "Creatinine": 0.84, "eGFR (CKD-EPI)": 80, "Blood Urea": 40.5, "Blood Urea Nitrogen (BUN)": 18.9, "BUN / Creatinine Ratio": 22.54, "Urea / Creatinine Ratio": 48.21, "Uric Acid": 3, "Calcium": 9.2, "Phosphorus": 4.8, "Sodium": 138, "Potassium": 4.84, "Chloride": 100, "NT-proBNP": 51.7, "Colour": "Yellow", "Appearance": "Clear", "Volume": 20, "Specific Gravity": 1.005, "pH": 7.5, "Glucose (Urine)": "Trace*", "Protein (Urine)": "Negative", "Ketones": "Negative", "Urobilinogen": "Normal", "Bilirubin (Urine)": "Negative", "Nitrite": "Negative", "Blood (Urine)": "Negative", "Leucocyte Esterase": "Negative", "Pus Cells": "1-2", "Epithelial Cells": "2-4", "RBCs (Urine)": "Nil", "Casts": "Nil", "Crystals": "Nil", "Bacteria": "Absent", "Yeast Cells": "Absent", "Others (Non-specific)": "Nil"}}, {"date": "2026-05-11", "lab": "Hlth", "values": {"Haemoglobin (Hb)": 13.2, "Total Leucocyte Count (TLC)": 5.8, "Red Blood Cell Count (RBC)": 4.22, "Haematocrit (PCV)": 38.9, "Mean Corpuscular Volume (MCV)": 92, "Mean Corpuscular Hb (MCH)": 31.3, "Mean Corpuscular Hb Conc (MCHC)": 34, "RDW – CV": 13.6, "RDW – SD": 42.8, "Mentzer Index": 21.8, "RDW Index (RDWI)": 296.49, "Green & King Index": 87, "Neutrophils": 70, "Lymphocytes": 22.7, "Monocytes": 4.1, "Eosinophils": 3.2, "Basophils": 0, "Absolute Neutrophil Count (ANC)": 4.03, "Absolute Lymphocyte Count (ALC)": 1.31, "Absolute Monocyte Count": 0.24, "Absolute Eosinophil Count (AEC)": 0.18, "Platelet Count (PLT)": 224, "Mean Platelet Volume (MPV)": 9.7, "Glucose, Fasting (FBS)": 84.8, "Total Cholesterol": 186.8, "Triglycerides": 112.1, "Serum Iron": 83, "Bilirubin, Total": 0.72, "Bilirubin, Direct": 0.15, "Bilirubin, Indirect": 0.57, "AST (SGOT)": 37, "ALT (SGPT)": 44.4, "Alkaline Phosphatase (ALP)": 85, "Gamma GT (GGT)": 20.8, "Total Protein": 6.5, "Albumin": 4.07, "Globulin": 2.43, "Albumin / Globulin Ratio": 1.67, "SGOT / SGPT Ratio": 0.83, "Creatinine": 0.94, "eGFR (CKD-EPI)": 69.9, "Blood Urea": 52.6, "Blood Urea Nitrogen (BUN)": 24.6, "BUN / Creatinine Ratio": 26.15, "Urea / Creatinine Ratio": 55.96, "Uric Acid": 3.9, "Calcium": 9.8, "Phosphorus": 4.7, "Sodium": 132, "Chloride": 94, "Colour": "Yellow", "Appearance": "Clear", "Volume": 10, "Specific Gravity": 1.01, "pH": 7.5, "Glucose (Urine)": "Trace*", "Protein (Urine)": "Negative", "Ketones": "Negative", "Urobilinogen": "Normal", "Bilirubin (Urine)": "Negative", "Nitrite": "Negative", "Blood (Urine)": "Negative", "Leucocyte Esterase": "Negative", "Pus Cells": "3-4", "Epithelial Cells": "2-3", "RBCs (Urine)": "Nil", "Casts": "Nil", "Crystals": "Nil", "Bacteria": "Absent", "Yeast Cells": "Absent", "Others (Non-specific)": "Nil"}}, {"date": "2026-05-03", "lab": "Hlth", "values": {"Haemoglobin (Hb)": 13.2, "Total Leucocyte Count (TLC)": 9.6, "Red Blood Cell Count (RBC)": 4.22, "Haematocrit (PCV)": 38.9, "Mean Corpuscular Volume (MCV)": 92.2, "Mean Corpuscular Hb (MCH)": 31.2, "Mean Corpuscular Hb Conc (MCHC)": 33.8, "RDW – CV": 13.5, "RDW – SD": 42.8, "Mentzer Index": 21.85, "RDW Index (RDWI)": 294.95, "Green & King Index": 87, "Neutrophils": 74.5, "Lymphocytes": 15.2, "Monocytes": 8.8, "Eosinophils": 1.3, "Basophils": 0.2, "Absolute Neutrophil Count (ANC)": 7.15, "Absolute Lymphocyte Count (ALC)": 1.46, "Absolute Monocyte Count": 0.84, "Absolute Eosinophil Count (AEC)": 0.12, "Absolute Basophil Count": 0.02, "Platelet Count (PLT)": 254, "Mean Platelet Volume (MPV)": 8.6, "Glucose, Fasting (FBS)": 82, "Total Cholesterol": 179, "Triglycerides": 70, "Serum Iron": 80, "Bilirubin, Total": 0.62, "Bilirubin, Direct": 0.12, "Bilirubin, Indirect": 0.5, "AST (SGOT)": 24, "ALT (SGPT)": 21.2, "Alkaline Phosphatase (ALP)": 77, "Gamma GT (GGT)": 16, "Total Protein": 6.95, "Albumin": 4.12, "Globulin": 2.83, "Albumin / Globulin Ratio": 1.46, "SGOT / SGPT Ratio": 1.13, "Creatinine": 0.84, "eGFR (CKD-EPI)": 80, "Blood Urea": 36.8, "Blood Urea Nitrogen (BUN)": 17.2, "BUN / Creatinine Ratio": 20.48, "Urea / Creatinine Ratio": 43.81, "Uric Acid": 3.4, "Calcium": 9.4, "Phosphorus": 4, "Sodium": 132, "Chloride": 93, "aPTT — Patient Value": 33.7, "aPTT — Control Value": 31.5, "aPTT — Ratio": 1.07, "Prothrombin Time (PT)": 12.3, "PT — Control (MNPT)": 11.1, "PT — Ratio": 1.11, "INR": 1.1, "Thyroxine, Total (T4)": 7.72, "Free T3 (FT3)": 2.59, "Free T4 (FT4)": 0.89, "TSH (Ultrasensitive)": 0.805, "Cortisol (morning sample)": 14.46, "Colour": "Pale Yellow", "Appearance": "Clear", "Volume": 20, "Specific Gravity": 1.005, "pH": 7, "Glucose (Urine)": "Trace*", "Protein (Urine)": "Negative", "Ketones": "Negative", "Urobilinogen": "Normal", "Bilirubin (Urine)": "Negative", "Nitrite": "Negative", "Blood (Urine)": "Negative", "Leucocyte Esterase": "Negative", "Pus Cells": "1-2", "Epithelial Cells": "2-4", "RBCs (Urine)": "Nil", "Casts": "Nil", "Crystals": "Nil", "Bacteria": "Absent", "Yeast Cells": "Absent", "Others (Non-specific)": "Nil"}}, {"date": "2026-05-18", "lab": "SGRH", "values": {"DTPA GFR": 104.7}}, {"date": "2026-05-05", "lab": "Athn", "values": {"NT-proBNP": 201}}];
@@ -1182,6 +1344,7 @@ function saveBlood(){
   try{ localStorage.setItem('maa_blood_params',JSON.stringify(customParams)); }catch(e){}
   try{ localStorage.setItem('maa_blood_keyoverrides',JSON.stringify(keyOverrides)); }catch(e){}
   try{ localStorage.setItem('maa_blood_sectionorder',JSON.stringify(sectionOrder)); }catch(e){}
+  if(typeof autoSync==='function' && !window._applyingSync) autoSync();
 }
 // Natural section order as they first appear in the parameter list
 function naturalSectionOrder(){
@@ -1805,7 +1968,7 @@ buildChips();
 updateHeader();
 nav('summary');
 var cid=localStorage.getItem('gdrive_client_id');
-if(cid) initGIS(cid);
+if(cid){ initGIS(cid); setTimeout(function(){ if(window._gTC && !window._gToken){ try{ window._gTC.requestAccessToken({prompt:''}); }catch(e){} } }, 1200); }
 }
 </script>
 </body>
