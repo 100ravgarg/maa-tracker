@@ -158,9 +158,11 @@ body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;font-size:15px;backg
       <textarea id="f-remark" placeholder="Any detailed notes, observations, next steps…"></textarea></div>
     <div class="fg">
       <label>Attach document <span style="font-weight:400;color:#bbb">(PDF or image)</span></label>
-      <div class="file-drop" onclick="document.getElementById('f-file').click()">📎 Tap to attach a file</div>
+      <div class="file-drop" onclick="document.getElementById('f-file').click()">📎 Tap to attach a file (stored in app)</div>
       <input type="file" id="f-file" accept=".pdf,.jpg,.jpeg,.png,.webp" style="display:none" onchange="onFile(event)">
       <div id="file-prev"></div>
+      <div class="file-drop" style="margin-top:8px;border-color:#9cc3e8;color:#174a8c" onclick="pickFromDrive()">☁️ Link a PDF from Google Drive</div>
+      <div id="drive-prev"></div>
     </div>
     <button class="btn-add" onclick="addEntry()" id="add-btn">+ Add Entry</button>
     <button class="btn-out" id="cancel-edit-btn" style="display:none;margin-top:8px" onclick="cancelEdit()">Cancel edit</button>
@@ -234,6 +236,12 @@ body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;font-size:15px;backg
   </div>
   <div class="card"><div class="card-ttl">By type</div><div id="s-type"></div></div>
   <div class="card"><div class="card-ttl">Doctors &amp; Hospitals</div><div id="s-docs"></div></div>
+  <div class="card">
+    <div class="card-ttl">Share with family (view-only)</div>
+    <p style="font-size:12px;color:#999;margin-bottom:8px">Creates a read-only link of everything — timeline, expenses, blood, notes. Family can open it on any phone, no sign-in needed. They can view but not edit.</p>
+    <button class="btn-out" onclick="shareFamilyView()">🔗 Create family view link</button>
+    <p style="font-size:11px;color:#c0392b;margin-top:6px">⚠️ The link contains the data — share only with family. Re-create it to share newer data.</p>
+  </div>
   <div class="card">
     <div class="card-ttl">Export &amp; Import</div>
     <button class="btn-out" onclick="exportCSV()">⬇ Download CSV (for Excel)</button>
@@ -437,7 +445,7 @@ var CATEGORIES = [
 ];
 var customSubs = {}; // {categoryKey: [extra subtypes typed by user]}
 
-var entries = [], curFilter = 'all', pendingFile = null, curPage = 'add', editingId = null;
+var entries = [], curFilter = 'all', pendingFile = null, pendingDriveFile = null, curPage = 'add', editingId = null;
 var notes = [], noteFilter = 'all', editingNoteId = null;
 
 function getCatDef(key){
@@ -700,6 +708,82 @@ function onFile(e){
   r.readAsDataURL(file);
 }
 
+// ─── GOOGLE DRIVE PICKER (link a PDF from your Drive) ─────────────────────────
+var DRIVE_API_KEY = 'AIzaSyDnmzVmYl-2V-rlvT63_Nc723VXvDeV7JI';
+var DRIVE_PICKER_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+var _pickerToken = null;
+
+function driveChipHTML(df){
+  return '<div style="display:flex;align-items:center;gap:8px;background:#edf3fe;border:1px solid #9cc3e8;border-radius:8px;padding:8px 12px;margin-top:8px">'
+    +'<span style="font-size:18px">☁️📄</span>'
+    +'<span style="font-size:13px;font-weight:600;flex:1;color:#174a8c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+df.name+'</span>'
+    +'<button onclick="pendingDriveFile=null;document.getElementById(&#39;drive-prev&#39;).innerHTML=&#39;&#39;" style="background:none;border:none;font-size:18px;cursor:pointer;color:#aaa">✕</button>'
+    +'</div>';
+}
+
+function pickFromDrive(){
+  var cid = localStorage.getItem('gdrive_client_id');
+  if(!cid){ toast('First connect Google in Settings'); nav('settings'); return; }
+  if(typeof google==='undefined' || !google.accounts){ toast('Google not loaded yet, try again'); return; }
+  // Get a token with drive.file scope (lets the app open files you pick)
+  if(!_pickerToken){
+    var tc = google.accounts.oauth2.initTokenClient({
+      client_id: cid, scope: DRIVE_PICKER_SCOPE,
+      callback: function(resp){
+        if(resp && resp.access_token){ _pickerToken = resp.access_token; loadPickerApi(openDrivePicker); }
+        else toast('Google sign-in needed for Drive');
+      }
+    });
+    tc.requestAccessToken({prompt:''});
+  } else {
+    loadPickerApi(openDrivePicker);
+  }
+}
+
+function loadPickerApi(cb){
+  if(window.google && google.picker){ cb(); return; }
+  if(!document.getElementById('gapi-js')){
+    var s=document.createElement('script'); s.id='gapi-js'; s.src='https://apis.google.com/js/api.js';
+    s.onload=function(){ gapi.load('picker', {callback: cb}); };
+    document.head.appendChild(s);
+  } else { gapi.load('picker', {callback: cb}); }
+}
+
+function openDrivePicker(){
+  if(!_pickerToken){ toast('Not signed in to Drive'); return; }
+  var view = new google.picker.DocsView(google.picker.ViewId.DOCS)
+    .setMimeTypes('application/pdf,image/jpeg,image/png')
+    .setIncludeFolders(true)
+    .setSelectFolderEnabled(false);
+  var picker = new google.picker.PickerBuilder()
+    .addView(view)
+    .setOAuthToken(_pickerToken)
+    .setDeveloperKey(DRIVE_API_KEY)
+    .setCallback(drivePickerCallback)
+    .setTitle('Select a document to link')
+    .build();
+  picker.setVisible(true);
+}
+
+function drivePickerCallback(data){
+  if(data.action === google.picker.Action.PICKED && data.docs && data.docs.length){
+    var doc = data.docs[0];
+    pendingDriveFile = {
+      id: doc.id,
+      name: doc.name,
+      url: doc.url || ('https://drive.google.com/file/d/'+doc.id+'/view'),
+      mime: doc.mimeType||''
+    };
+    document.getElementById('drive-prev').innerHTML = driveChipHTML(pendingDriveFile);
+    toast('✓ Drive file linked');
+  }
+}
+
+function openDriveFile(id){
+  var e=null; for(var i=0;i<entries.length;i++){ if(entries[i].id===id){e=entries[i];break;} }
+  if(e && e.driveFile && e.driveFile.url) window.open(e.driveFile.url, '_blank');
+}
+
 // ─── ADD / EDIT ENTRY ─────────────────────────────────────────────────────────
 function addEntry(){
   var date = fixDate(document.getElementById('f-date').value);
@@ -718,10 +802,11 @@ function addEntry(){
     hosp: document.getElementById('f-hosp').value.trim(),
     cost: parseFloat(document.getElementById('f-cost').value)||0,
     paid: document.getElementById('f-paid').value,
-    remark: document.getElementById('f-remark').value.trim()
+    remark: document.getElementById('f-remark').value.trim(),
+    driveFile: pendingDriveFile||null
   };
   if(editingId){
-    for(var i=0;i<entries.length;i++){ if(entries[i].id===editingId){ Object.assign(entries[i], data); if(pendingFile) entries[i].file=pendingFile; break; } }
+    for(var i=0;i<entries.length;i++){ if(entries[i].id===editingId){ var kd=pendingDriveFile||entries[i].driveFile||null; Object.assign(entries[i], data); if(pendingFile) entries[i].file=pendingFile; entries[i].driveFile=kd; break; } }
     toast('✓ Entry updated');
   } else {
     data.id = Date.now(); data.file = pendingFile||null;
@@ -733,6 +818,7 @@ function addEntry(){
   if(editingId){ cancelEdit(); nav('timeline'); }
 }
 function clearForm(){
+  pendingDriveFile=null; var _dp=document.getElementById('drive-prev'); if(_dp)_dp.innerHTML='';
   ['f-name','f-episode','f-doc','f-spec','f-ordered','f-hosp','f-remark','f-sub'].forEach(function(id){ document.getElementById(id).value=''; });
   document.getElementById('f-cost').value='';
   document.getElementById('f-paid').value='';
@@ -755,6 +841,7 @@ function startEdit(id){
   document.getElementById('f-cost').value = e.cost||'';
   document.getElementById('f-paid').value = e.paid||'';
   document.getElementById('f-remark').value = e.remark||'';
+  pendingDriveFile=null; var _edp=document.getElementById('drive-prev'); if(_edp) _edp.innerHTML = e.driveFile ? driveChipHTML(e.driveFile) : '';
   document.getElementById('add-card-ttl').textContent = 'Edit Entry';
   document.getElementById('add-btn').textContent = '✓ Save Changes';
   document.getElementById('cancel-edit-btn').style.display = 'block';
@@ -868,7 +955,7 @@ function entryCardHTML(e){
     +'</div>'
     +'<button class="btn-del" onclick="openModal('+e.id+')">⋯</button>'
     +'</div>'
-    +(e.file?'<div class="tl-foot"><button class="att-pill" onclick="openFile('+e.id+')">'+(e.file.type&&e.file.type.includes('pdf')?'📄':'🖼️')+' '+e.file.name+'</button></div>':'')
+    +((e.file||e.driveFile)?'<div class="tl-foot" style="display:flex;gap:8px;flex-wrap:wrap">'+(e.file?'<button class="att-pill" onclick="openFile('+e.id+')">'+(e.file.type&&e.file.type.includes('pdf')?'📄':'🖼️')+' '+e.file.name+'</button>':'')+(e.driveFile?'<button class="att-pill" style="background:#edf3fe;color:#174a8c" onclick="openDriveFile('+e.id+')">☁️ '+e.driveFile.name+'</button>':'')+'</div>':'')
     +'</div>';
 }
 
@@ -891,6 +978,7 @@ function openModal(id){
   ].filter(Boolean);
   var html = rows.map(function(r){return '<div class="info-row"><div class="info-lbl">'+r[0]+'</div><div class="info-val">'+r[1]+'</div></div>';}).join('');
   if(e.file) html += '<div style="margin-top:10px"><button class="att-pill" style="font-size:13px;padding:8px 14px" onclick="openFile('+e.id+')">'+(e.file.type&&e.file.type.includes('pdf')?'📄':'🖼️')+' '+e.file.name+' — tap to open</button></div>';
+  if(e.driveFile) html += '<div style="margin-top:8px"><button class="att-pill" style="font-size:13px;padding:8px 14px;background:#edf3fe;color:#174a8c" onclick="openDriveFile('+e.id+')">☁️ '+e.driveFile.name+' — open in Drive</button></div>';
   html += '<div style="margin-top:14px"><button class="btn-out" onclick="startEdit('+e.id+')">✎ Edit this entry</button></div>';
   document.getElementById('m-body').innerHTML = html;
   document.getElementById('m-del').onclick = function(){ delEntry(id); };
@@ -1012,9 +1100,9 @@ function updateHeader(){
 // ─── EXPORT CSV ───────────────────────────────────────────────────────────────
 function exportCSV(){
   if(!entries.length){toast('No entries yet');return;}
-  var hdr='Date,Category,Subtype,Name/Details,Episode,Doctor,Speciality,Ordered By,Hospital/Lab,Cost (INR),Paid By,Remarks,Document';
+  var hdr='Date,Category,Subtype,Name/Details,Episode,Doctor,Speciality,Ordered By,Hospital/Lab,Cost (INR),Paid By,Remarks,Document,Drive Link';
   var rows=entries.map(function(e){
-    return [e.date,e.cat,e.sub,e.name,e.episode,e.doc,e.spec,e.ordered,e.hosp,e.cost||0,e.paid||'',e.remark,e.file?e.file.name:'']
+    return [e.date,e.cat,e.sub,e.name,e.episode,e.doc,e.spec,e.ordered,e.hosp,e.cost||0,e.paid||'',e.remark,e.file?e.file.name:'',e.driveFile?e.driveFile.url:'']
       .map(function(v){return '"'+String(v||'').replace(/"/g,'""').replace(/\n/g,' ')+'"';}).join(',');
   });
   var csv='\uFEFF'+[hdr].concat(rows).join('\r\n');
@@ -1777,13 +1865,46 @@ function copyShareLink(){
 }
 function whatsappShareLink(){
   var link = document.getElementById('share-link-box').value;
-  var msg = 'Blood reports for review:\n'+link;
+  var msg = (window._shareMsg||'Update:')+'\n'+link;
   window.open('https://wa.me/?text='+encodeURIComponent(msg), '_blank');
 }
 
-// ─── READ-ONLY SHARED VIEWER (runs on the doctor's device) ────────────────────
+// ─── SHARE FULL FAMILY VIEW (read-only snapshot of everything) ────────────────
+function shareFamilyView(){
+  var payload = {
+    v: 1,
+    entries: entries,
+    bloodReports: bloodReports,
+    customParams: customParams,
+    keyOverrides: keyOverrides,
+    sectionOrder: sectionOrder,
+    notes: notes,
+    sharedAt: new Date().toISOString().slice(0,10)
+  };
+  var encoded = utf8ToB64(JSON.stringify(payload));
+  var base = location.origin + location.pathname;
+  var link = base + '#view=' + encoded;
+  window._shareMsg = 'Maa treatment update — tap to view (read-only):';
+  document.getElementById('share-link-box').value = link;
+  var kb = Math.round(link.length/1024*10)/10;
+  document.getElementById('share-size-note').textContent = 'Link size: ~'+kb+' KB · '+entries.length+' entries, '+bloodReports.length+' blood reports, '+notes.length+' notes';
+  // Update the modal title/intro for family context
+  var modal = document.getElementById('share-modal');
+  var ttl = modal.querySelector('.modal-ttl'); if(ttl) ttl.textContent = 'Share family view';
+  document.getElementById('share-modal').className = 'overlay on';
+}
+
+// ─── READ-ONLY SHARED VIEWER (runs on the viewer's device) ────────────────────
 function checkForSharedData(){
   var hash = location.hash || '';
+  if(hash.indexOf('#view=')===0){
+    try{
+      var enc = hash.slice('#view='.length);
+      var d = JSON.parse(b64ToUtf8(enc));
+      renderFamilyViewer(d);
+      return true;
+    }catch(e){ return false; }
+  }
   if(hash.indexOf('#blood=')!==0) return false;
   try{
     var encoded = hash.slice('#blood='.length);
@@ -1794,8 +1915,121 @@ function checkForSharedData(){
     return false;
   }
 }
+function renderFamilyViewer(d){
+  var entriesV = (d.entries||[]).slice().sort(function(a,b){return b.date.localeCompare(a.date);});
+  var bloodV = (d.bloodReports||[]).slice().sort(function(a,b){return b.date.localeCompare(a.date);});
+  var notesV = d.notes||[];
+  var paramsAll = BLOOD_PARAMS.concat(d.customParams||[]);
+  var ko = d.keyOverrides||{};
+  function isKeyV(p){ if(ko.hasOwnProperty(p[0])) return ko[p[0]]===1; return p[4]===1; }
+  var order = (d.sectionOrder&&d.sectionOrder.length)?d.sectionOrder.slice():[];
+  (function(){ var seen={}; paramsAll.forEach(function(p){ if(!seen[p[3]]){seen[p[3]]=1; if(order.indexOf(p[3])<0) order.push(p[3]);} }); })();
+  function bySec(list){ return list.slice().sort(function(a,b){ return order.indexOf(a[3])-order.indexOf(b[3]); }); }
+
+  var CATCOL = {Treatment:'#8c1414',Imaging:'#174a8c','Lab Test':'#0a5c35',Consultation:'#4a2c9e',Pharmacy:'#7a4a00',Procedure:'#72243e',Other:'#5a5955'};
+  function catColV(c){ return CATCOL[c]||'#5a5955'; }
+  function money(n){ return '₹'+(n||0).toLocaleString('en-IN'); }
+  function fmtD(s){ var d2=new Date(s+'T00:00:00'); return isNaN(d2)?s:d2.getDate()+' '+d2.toLocaleDateString('en-IN',{month:'short',year:'2-digit'}); }
+
+  var tab = 'timeline';
+  function build(){
+    var totalSpend = entriesV.reduce(function(s,e){return s+(e.cost||0);},0);
+    var h = '<div style="max-width:900px;margin:0 auto;font-family:-apple-system,Segoe UI,Roboto,sans-serif">';
+    // Header
+    h += '<div style="background:#fff;border:1px solid #e4e2db;border-radius:12px;padding:14px 16px;margin-bottom:12px">';
+    h += '<div style="font-size:18px;font-weight:700">🌸 Sunita Gupta — Treatment Tracker</div>';
+    h += '<div style="font-size:12px;color:#999;margin-top:2px">Read-only family view · shared '+(d.sharedAt||'')+' · '+entriesV.length+' entries · Total '+money(totalSpend)+'</div>';
+    h += '</div>';
+    // Tabs
+    var tabs = [['timeline','Timeline'],['expenses','Expenses'],['blood','Blood'],['notes','Notes']];
+    h += '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">';
+    tabs.forEach(function(t){
+      var on = tab===t[0];
+      h += '<button onclick="window._fv(&#39;'+t[0]+'&#39;)" style="padding:7px 14px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid '+(on?'#1a6b4a':'#e0ddd6')+';background:'+(on?'#1a6b4a':'#fff')+';color:'+(on?'#fff':'#888')+';font-family:inherit">'+t[1]+'</button>';
+    });
+    h += '</div>';
+    h += '<div>'+ ({timeline:tlView,expenses:expView,blood:bloodViewFn,notes:notesView}[tab])() +'</div>';
+    h += '<div style="text-align:center;margin:24px 0 8px;font-size:11px;color:#ccc">Read-only snapshot · Generated by Maa&#39;s Treatment Tracker</div>';
+    h += '</div>';
+    document.getElementById('shared-viewer').innerHTML = h;
+  }
+  function tlView(){
+    if(!entriesV.length) return '<div style="text-align:center;color:#bbb;padding:30px">No entries.</div>';
+    var h='', lastMonth=null, lastDate=null;
+    entriesV.forEach(function(e){
+      var dt=new Date(e.date+'T00:00:00');
+      var mk2 = isNaN(dt)?'x':dt.getFullYear()+'-'+dt.getMonth();
+      if(mk2!==lastMonth){
+        var mName = isNaN(dt)?'':dt.toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+        var mEnt = entriesV.filter(function(x){var dd=new Date(x.date+'T00:00:00'); return !isNaN(dd)&&(dd.getFullYear()+'-'+dd.getMonth())===mk2;});
+        var mSp = mEnt.reduce(function(s,x){return s+(x.cost||0);},0);
+        h+='<div style="display:flex;justify-content:space-between;align-items:baseline;margin:16px 2px 8px;padding-bottom:5px;border-bottom:2px solid #e4e2db"><span style="font-size:14px;font-weight:700;color:#444">'+mName+'</span><span style="font-size:11px;color:#999">'+mEnt.length+' events · '+money(mSp)+'</span></div>';
+        lastMonth=mk2; lastDate=null;
+      }
+      if(e.date!==lastDate){ h+='<div style="font-size:14px;font-weight:700;color:#1a6b4a;margin:10px 2px 6px">'+fmtD(e.date)+'</div>'; lastDate=e.date; }
+      var col=catColV(e.cat);
+      var meta=[];
+      if(e.doc) meta.push('👨‍⚕️ '+e.doc+(e.spec?' ('+e.spec+')':''));
+      if(e.hosp) meta.push('🏥 '+e.hosp);
+      h+='<div style="border:1px solid #e4e2db;border-left:4px solid '+col+';border-radius:10px;margin-bottom:8px;padding:10px 12px;background:#fff">';
+      h+='<div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center"><span style="background:'+col+'22;color:'+col+';font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px">'+(e.sub||e.cat)+'</span>'+(e.name?'<span style="font-size:13px;font-weight:600">'+e.name+'</span>':'')+(e.episode?'<span style="font-size:11px;color:#888;background:#f1efe8;border-radius:10px;padding:2px 8px">🔗 '+e.episode+'</span>':'')+'</div>';
+      if(meta.length) h+='<div style="font-size:12px;color:#888;margin-top:4px">'+meta.join(' &nbsp; ')+'</div>';
+      if(e.cost) h+='<div style="font-size:13px;color:#1a6b4a;font-weight:700;margin-top:4px">'+money(e.cost)+(e.paid?' <span style="font-size:11px;font-weight:400;color:#888">· '+e.paid+'</span>':'')+'</div>';
+      if(e.remark) h+='<div style="font-size:12px;color:#777;margin-top:4px;white-space:pre-wrap">'+e.remark+'</div>';
+      if(e.driveFile && e.driveFile.url) h+='<div style="margin-top:6px"><a href="'+e.driveFile.url+'" target="_blank" style="font-size:12px;color:#174a8c;text-decoration:none;background:#edf3fe;border:1px solid #9cc3e8;border-radius:8px;padding:4px 10px;display:inline-block">☁️ '+(e.driveFile.name||'View document')+'</a></div>';
+      h+='</div>';
+    });
+    return h;
+  }
+  function expView(){
+    var byCat={}, byPaid={};
+    entriesV.forEach(function(e){ if(e.cost){ byCat[e.cat]=(byCat[e.cat]||0)+e.cost; if(e.paid) byPaid[e.paid]=(byPaid[e.paid]||0)+e.cost; } });
+    var total=entriesV.reduce(function(s,e){return s+(e.cost||0);},0);
+    var h='<div style="background:#fff;border:1px solid #e4e2db;border-radius:12px;padding:16px;margin-bottom:10px"><div style="font-size:12px;color:#999">Total spent</div><div style="font-size:26px;font-weight:700;color:#1a6b4a">'+money(total)+'</div></div>';
+    function rows(obj,title){
+      var keys=Object.keys(obj).sort(function(a,b){return obj[b]-obj[a];});
+      if(!keys.length) return '';
+      var r='<div style="background:#fff;border:1px solid #e4e2db;border-radius:12px;padding:14px;margin-bottom:10px"><div style="font-size:13px;font-weight:700;margin-bottom:8px">'+title+'</div>';
+      keys.forEach(function(k){ r+='<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0efeb;font-size:13px"><span>'+k+'</span><strong>'+money(obj[k])+'</strong></div>'; });
+      return r+'</div>';
+    }
+    return h+rows(byCat,'By category')+rows(byPaid,'By who paid');
+  }
+  function bloodViewFn(){
+    if(!bloodV.length) return '<div style="text-align:center;color:#bbb;padding:30px">No blood reports.</div>';
+    var showParams = bySec(paramsAll.filter(isKeyV));
+    var h='<div style="font-size:12px;color:#999;margin-bottom:8px">Showing key parameters · '+bloodV.length+' reports</div>';
+    h+='<div style="overflow:auto;border:1px solid #e4e2db;border-radius:10px;background:#fff;max-height:70vh"><table style="border-collapse:collapse;font-size:12px;min-width:100%">';
+    h+='<thead><tr><th style="position:sticky;left:0;top:0;background:#f5f4f1;z-index:3;text-align:left;padding:8px;border-bottom:2px solid #e4e2db;min-width:90px;font-size:10px">Parameter</th><th style="position:sticky;top:0;background:#f5f4f1;padding:8px 6px;border-bottom:2px solid #e4e2db;font-size:10px;color:#999;z-index:2">Ref</th>';
+    bloodV.forEach(function(rp,idx){ var bg=idx===0?'#1a6b4a':'#f5f4f1'; var fg=idx===0?'#fff':'#1a1a18'; h+='<th style="position:sticky;top:0;background:'+bg+';color:'+fg+';padding:6px 8px;border-bottom:2px solid #e4e2db;text-align:center;min-width:56px;z-index:2"><div style="font-weight:700;font-size:11px">'+fmtD(rp.date)+'</div><div style="font-size:9px;color:'+(idx===0?'#cfe8da':'#1a6b4a')+';font-weight:600">'+(rp.lab||'')+'</div></th>'; });
+    h+='</tr></thead><tbody>';
+    var lastSec=null;
+    showParams.forEach(function(p){
+      if(p[3]!==lastSec){ h+='<tr><td colspan="'+(bloodV.length+2)+'" style="background:#eef2ee;padding:5px 8px;font-size:9px;font-weight:700;color:#5a7a5a;position:sticky;left:0">'+p[3].split('—')[0].trim()+'</td></tr>'; lastSec=p[3]; }
+      h+='<tr><td style="position:sticky;left:0;background:#fff;padding:7px 8px;border-bottom:1px solid #f0efeb;font-size:11px;min-width:90px">'+p[0]+(p[1]?' <span style="color:#bbb;font-size:9px">'+p[1]+'</span>':'')+'</td><td style="padding:7px 6px;border-bottom:1px solid #f0efeb;font-size:9px;color:#aaa;text-align:center">'+(p[2]||'—')+'</td>';
+      bloodV.forEach(function(rp,idx){
+        var v=rp.values[p[0]];
+        if(v===undefined||v===null||v===''){ h+='<td style="padding:7px 8px;border-bottom:1px solid #f0efeb;text-align:center;color:#ddd'+(idx===0?';background:#eef5f0':'')+'">·</td>'; }
+        else { var fl=flagValue(v,p[2]); var ab=(fl==='high'||fl==='low'); var ar=fl==='high'?' ▲':fl==='low'?' ▼':''; var st='padding:7px 8px;border-bottom:1px solid #f0efeb;text-align:center;font-weight:600;'; if(ab) st+='color:#c0392b;background:'+(idx===0?'#f9dede':'#fdecec'); else st+='color:#1a1a18'+(idx===0?';background:#eef5f0':''); h+='<td style="'+st+'">'+v+ar+'</td>'; }
+      });
+      h+='</tr>';
+    });
+    h+='</tbody></table></div>';
+    return h;
+  }
+  function notesView(){
+    if(!notesV.length) return '<div style="text-align:center;color:#bbb;padding:30px">No notes.</div>';
+    var ICON={doctor:'👨‍⚕️',hospital:'🎒',general:'📝'}, LBL={doctor:'For Doctor',hospital:'Hospital Checklist',general:'General'};
+    return notesV.map(function(n){
+      var body=(n.body||'').split('\\n').map(function(l){var t=l.trim(); if(t.indexOf('-')===0) return '<div style="display:flex;gap:6px;padding:1px 0"><span style="color:#bbb">☐</span><span>'+t.slice(1).trim()+'</span></div>'; return t?'<div>'+t+'</div>':'<div style="height:5px"></div>';}).join('');
+      return '<div style="background:#fff;border:1px solid #e4e2db;border-radius:10px;padding:12px;margin-bottom:8px'+(n.done?';opacity:.55':'')+'"><span style="font-size:11px;color:#666;background:#f1efe8;padding:2px 8px;border-radius:10px">'+(ICON[n.type]||'📝')+' '+(LBL[n.type]||'Note')+'</span>'+(n.title?'<div style="font-size:14px;font-weight:700;margin:6px 0 4px">'+n.title+'</div>':'')+'<div style="font-size:13px;color:#555;line-height:1.5;margin-top:4px">'+body+'</div></div>';
+    }).join('');
+  }
+  window._fv = function(t){ tab=t; build(); };
+  build();
+  document.getElementById('shared-viewer').style.display = 'block';
+}
 function renderSharedViewer(data){
-  // Build a combined params list = built-in + any custom shared
   var params = BLOOD_PARAMS.concat(data.customParams||[]);
   var ko = data.keyOverrides||{};
   function isKey(p){ if(ko.hasOwnProperty(p[0])) return ko[p[0]]===1; return p[4]===1; }
