@@ -994,7 +994,9 @@ function renderSettings(){
   } else {
     ghtml='<p style="font-size:13px;color:#1a6b4a;font-weight:600;margin-bottom:10px">✅ Signed in — sync active</p>'
       +'<button class="btn-out" onclick="gSync()">🔄 Sync now</button>'
-      +'<button class="btn-out" onclick="gSignOut()">Sign out</button>';
+      +'<button class="btn-out" onclick="pullReplace()" style="margin-top:8px">⬇ Get latest from cloud (replace this device)</button>'
+      +'<p style="font-size:11px;color:#bbb;margin:6px 0 0">Use this on your other device after an Excel re-import, to adopt the corrected list.</p>'
+      +'<button class="btn-out" onclick="gSignOut()" style="margin-top:8px">Sign out</button>';
   }
   document.getElementById('gdrive-ui').innerHTML=ghtml;
 }
@@ -1087,12 +1089,19 @@ function importCSV(ev){
         });
       }
       if(!imported.length){toast('No valid rows found');return;}
-      if(!confirm('Replace '+entries.length+' entries with '+imported.length+' from CSV?')) return;
+      if(!confirm('Replace '+entries.length+' entries with '+imported.length+' from CSV?\n\nThis corrected list will become the truth on ALL your devices.')) return;
       entries=imported.sort(function(a,b){return b.date.localeCompare(a.date);});
       saveData(); buildChips(); updateHeader(); refreshDatalists();
       document.getElementById('imp-csv').value='';
-      toast('✓ Imported '+imported.length+' entries');
       renderSummary();
+      // Excel import is AUTHORITATIVE — force-overwrite Drive so the other device gets
+      // these exact entries (including any deletions/edits), bypassing the safe merge.
+      if(window._gToken){
+        toast('✓ Imported — pushing to all devices…');
+        forcePushToDrive(function(ok){ toast(ok ? '✓ Imported & synced to all devices' : '✓ Imported (sync push failed, tap Sync now)'); });
+      } else {
+        toast('✓ Imported '+imported.length+' entries');
+      }
     }catch(err){toast('Import failed'); console.error(err);}
   };
   r.readAsText(file,'UTF-8');
@@ -1285,6 +1294,45 @@ function gSync(){
         toast('Sync upload failed — try again');
       }
     });
+  });
+}
+
+// Force-push current data to Drive WITHOUT merging — used after an Excel import,
+// so corrections and deletions become the truth on all devices.
+function forcePushToDrive(cb){
+  if(!window._gToken){ cb && cb(false); return; }
+  var data = collectAllData();
+  gUpload(data, function(ok){ cb && cb(ok); });
+}
+
+// Pull from Drive and REPLACE local entirely (no merge). Used on the second device
+// after an Excel correction, so deletions/edits are adopted cleanly.
+function pullReplace(){
+  if(!window._gToken){ gSignIn(); return; }
+  if(!confirm('Replace this device data with the latest from the cloud?\n\nUse this after correcting via Excel on your other device.')) return;
+  toast('Getting latest…');
+  gDownload(function(remote){
+    if(!remote){ toast('Nothing found in cloud yet'); return; }
+    window._applyingSync = true;
+    // Replace, not merge
+    if(remote.entries){ entries = remote.entries.map(migrateEntry); entries.sort(function(a,b){return b.date.localeCompare(a.date);}); }
+    else entries = [];
+    customSubs = remote.customSubs || {};
+    notes = remote.notes || [];
+    bloodReports = remote.bloodReports || [];
+    customParams = remote.customParams || [];
+    customLabs = remote.customLabs || [];
+    keyOverrides = remote.keyOverrides || {};
+    sectionOrder = remote.sectionOrder || [];
+    saveData(); saveNotes(); saveBlood();
+    window._applyingSync = false;
+    buildChips(); updateHeader(); refreshDatalists();
+    if(curPage==='summary') renderSummary();
+    else if(curPage==='timeline'){ buildChips(); renderTimeline(); }
+    else if(curPage==='blood') renderBloodPage();
+    else if(curPage==='expenses') renderExpenses();
+    else if(curPage==='notes') renderNotes();
+    toast('✓ This device now matches the cloud');
   });
 }
 
