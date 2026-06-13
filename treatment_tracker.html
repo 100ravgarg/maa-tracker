@@ -16,9 +16,23 @@ body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;font-size:15px;backg
 .pg.on{display:block!important}
 /* BOTTOM NAV */
 #botnav{position:fixed;bottom:0;left:0;right:0;height:58px;background:#fff;border-top:1px solid #e4e2db;display:flex;z-index:40}
-#botnav button{flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:9px;color:#aaa;font-family:inherit;padding:6px 1px}
-#botnav button.on{color:#1a6b4a}
-#botnav button svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#botnav button{flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:9px;color:#aaa;font-family:inherit;padding:6px 1px;transition:transform .12s}
+/* Each nav button has its own colour, shown softly when inactive, full + lifted when active */
+#nb-summary{color:#9a8ab8}
+#nb-add{color:#3a7a52}
+#nb-timeline{color:#6a8db8}
+#nb-blood{color:#c0392b}
+#nb-expenses{color:#b07a30}
+#nb-notes{color:#5a8a6a}
+#botnav button.on{font-weight:700}
+#nb-summary.on{color:#6a4ea0}
+#nb-add.on{color:#1a6b4a}
+#nb-timeline.on{color:#174a8c}
+#nb-blood.on{color:#a3221a}
+#nb-expenses.on{color:#7a4a00}
+#nb-notes.on{color:#0a5c35}
+#botnav button.on svg{transform:scale(1.12)}
+#botnav button svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;transition:transform .12s}
 /* CARDS */
 .card{background:#fff;border:1px solid #e4e2db;border-radius:12px;padding:14px 16px;margin-bottom:12px}
 .card-ttl{font-size:11px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
@@ -1103,9 +1117,13 @@ function exportCSV(){
 
 // ─── BACKUP / RESTORE ─────────────────────────────────────────────────────────
 function exportBackup(){
-  var payload={entries:entries,customSubs:customSubs,notes:notes,sectionOrder:sectionOrder,at:new Date().toISOString(),v:5};
+  var payload={
+    entries:entries, customSubs:customSubs, notes:notes, sectionOrder:sectionOrder,
+    bloodReports:bloodReports, customParams:customParams, customLabs:customLabs, keyOverrides:keyOverrides,
+    at:new Date().toISOString(), v:6
+  };
   dl(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),'maa_backup_'+new Date().toISOString().slice(0,10)+'.json');
-  toast('✓ Backup downloaded');
+  toast('✓ Backup downloaded (incl. blood)');
 }
 function restoreBackup(ev){
   var file=ev.target.files[0]; if(!file) return;
@@ -1114,15 +1132,22 @@ function restoreBackup(ev){
     try{
       var d=JSON.parse(e.target.result);
       if(!d.entries){toast('Invalid backup file');return;}
-      if(!confirm('Replace all data with backup ('+d.entries.length+' entries)?')) return;
+      var bloodNote = d.bloodReports ? (' + '+d.bloodReports.length+' blood reports') : '';
+      if(!confirm('Replace all data with backup ('+d.entries.length+' entries'+bloodNote+')?')) return;
       entries=(d.entries||[]).map(migrateEntry);
       entries.sort(function(a,b){return b.date.localeCompare(a.date);});
       if(d.customSubs) customSubs=d.customSubs;
       if(d.notes){ notes=d.notes; saveNotes(); }
-      if(d.sectionOrder){ sectionOrder=d.sectionOrder; saveBlood(); }
+      if(d.sectionOrder) sectionOrder=d.sectionOrder;
+      // Restore blood data if present in the backup
+      if(d.bloodReports) bloodReports=d.bloodReports;
+      if(d.customParams) customParams=d.customParams;
+      if(d.customLabs) customLabs=d.customLabs;
+      if(d.keyOverrides) keyOverrides=d.keyOverrides;
+      saveBlood();
       saveData(); buildChips(); updateHeader(); renderSettings(); refreshDatalists();
       document.getElementById('imp-bak').value='';
-      toast('✓ Restored '+entries.length+' entries');
+      toast('✓ Restored '+entries.length+' entries'+bloodNote);
     }catch(err){toast('Could not read backup file');}
   };
   r.readAsText(file,'UTF-8');

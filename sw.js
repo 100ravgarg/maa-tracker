@@ -1,5 +1,5 @@
 // Service worker — caches the app shell so it works offline once installed.
-const CACHE = 'maa-tracker-v7';
+const CACHE = 'maa-tracker-v8';
 const ASSETS = [
   'treatment_tracker.html',
   'manifest.json',
