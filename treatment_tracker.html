@@ -1316,7 +1316,12 @@ function fbInit(){
     _fbReady = true;
     // Live listener — whenever cloud data changes, update this device
     _fbRef.on('value', function(snap){
-      var remote = snap.val();
+      var raw = snap.val();
+      // Cloud stores data as { json: "...", savedAt: ... }
+      var remote = null;
+      if(raw && raw.json){
+        try{ remote = JSON.parse(raw.json); }catch(e){ remote = null; }
+      }
       if(!remote){
         // Cloud is empty — push our local data once to seed it
         if(!_fbBootstrapped){ _fbBootstrapped = true; fbPush(); }
@@ -1347,7 +1352,11 @@ function fbPush(){
   if(!_fbReady) return;
   _fbWriting = true;
   var data = collectAllData();
-  _fbRef.set(data).then(function(){ _fbWriting=false; }).catch(function(){ _fbWriting=false; });
+  // Store the whole payload as ONE JSON string. This avoids Firebase's rule that
+  // keys can't contain / . # $ [ ] (e.g. a blood param "Albumin / Globulin Ratio").
+  _fbRef.set({ json: JSON.stringify(data), savedAt: Date.now() })
+    .then(function(){ _fbWriting=false; })
+    .catch(function(e){ _fbWriting=false; setFbStatus(false, e && e.message); });
 }
 
 // Called after any local change; pushes to cloud (unless we're mid-apply)
