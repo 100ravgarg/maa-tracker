@@ -2359,15 +2359,423 @@ if(checkForSharedData()){
 loadData();
 loadBlood();
 loadNotes();
+loadLists();
 document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
 buildCatSelect();
 onCatChange();
+buildHospSelect();
+buildDocSelect();
 refreshDatalists();
 buildChips();
 updateHeader();
 nav('summary');
 // Connect to Firebase for live shared sync (everyone sees the same data)
 fbInit();
+}
+// ═══════════════════════════════════════════════════════════════════════════
+// MANAGED LISTS: Hospitals, Doctors, Insurers
+// ═══════════════════════════════════════════════════════════════════════════
+var HOSPITALS = ['Athenaa','Healthians','Ganga Ram Hospital','Mahajan Lab','Medix Shalimar Bagh','Pharmeasy','Saral Diagnostics','SSB Hospital','Max Shalimar Bagh','Medanta','Dr. Chandrashekhar Clinic','Dr. Vineet Clinic','Dr Madhu Lab','Apollo Gurgaon','AIIMS'];
+var DOCTORS = ['Dr. Bhuvan','Dr. Aditi','Dr. Amit Dhamija','Dr. Anshul Mittal','Dr. Chandrashekhar','Dr. Jyoti','Dr. Yogesh','Dr. Saurabh','Dr. Darshit Jain','Dr. Madhwi Chawla','Dr. Sonia','Dr. Madhu','Dr. Amit Bhargava','Dr. Vineet Govinda Gupta','Dr. Shyam Aggarwal','Dr. Anshul','Dr. Kalra'];
+var INSURERS = ['MASIN','KROLL'];
+var claims = [];
+
+function loadLists(){
+  try{ var h=localStorage.getItem('maa_hospitals'); if(h) HOSPITALS=JSON.parse(h); }catch(e){}
+  try{ var d=localStorage.getItem('maa_doctors'); if(d) DOCTORS=JSON.parse(d); }catch(e){}
+  try{ var i=localStorage.getItem('maa_insurers'); if(i) INSURERS=JSON.parse(i); }catch(e){}
+  try{ var c=localStorage.getItem('maa_claims'); if(c) claims=JSON.parse(c); }catch(e){}
+  reconcileLists();
+}
+function saveLists(){
+  try{ localStorage.setItem('maa_hospitals',JSON.stringify(HOSPITALS)); }catch(e){}
+  try{ localStorage.setItem('maa_doctors',JSON.stringify(DOCTORS)); }catch(e){}
+  try{ localStorage.setItem('maa_insurers',JSON.stringify(INSURERS)); }catch(e){}
+  try{ localStorage.setItem('maa_claims',JSON.stringify(claims)); }catch(e){}
+  if(typeof fbAutoPush==='function') fbAutoPush();
+}
+// Make sure every hospital/doctor already used in your entries is always in the
+// dropdown list — even if it wasn't pre-added. Prevents old data from ever
+// looking "blank" when you edit an old entry.
+function reconcileLists(){
+  var hset={}; HOSPITALS.forEach(function(h){hset[h]=1;});
+  entries.forEach(function(e){ if(e.hosp && !hset[e.hosp]){ hset[e.hosp]=1; HOSPITALS.push(e.hosp); } });
+  var dset={}; DOCTORS.forEach(function(d){dset[d]=1;});
+  entries.forEach(function(e){ if(e.doc && !dset[e.doc]){ dset[e.doc]=1; DOCTORS.push(e.doc); } });
+}
+function buildHospSelect(){
+  var sel = document.getElementById('f-hosp');
+  var cur = sel.value;
+  sel.innerHTML = '<option value="">— select —</option>' + HOSPITALS.map(function(h){return '<option value="'+h+'">'+h+'</option>';}).join('') + '<option value="__new__">+ Add new hospital…</option>';
+  if(cur && HOSPITALS.indexOf(cur)>=0) sel.value = cur;
+}
+function buildDocSelect(){
+  var sel = document.getElementById('f-doc');
+  var cur = sel.value;
+  sel.innerHTML = '<option value="">— select —</option>' + DOCTORS.map(function(d){return '<option value="'+d+'">'+d+'</option>';}).join('') + '<option value="__new__">+ Add new doctor…</option>';
+  if(cur && DOCTORS.indexOf(cur)>=0) sel.value = cur;
+}
+document.addEventListener('change', function(e){
+  if(e.target && e.target.id==='f-hosp' && e.target.value==='__new__'){
+    var name = prompt('New hospital / lab name:');
+    if(name && name.trim()){
+      name = name.trim();
+      if(HOSPITALS.indexOf(name)<0){ HOSPITALS.push(name); saveLists(); }
+      buildHospSelect();
+      document.getElementById('f-hosp').value = name;
+    } else { e.target.value=''; }
+  }
+  if(e.target && e.target.id==='f-doc' && e.target.value==='__new__'){
+    var dname = prompt('New doctor name:');
+    if(dname && dname.trim()){
+      dname = dname.trim();
+      if(DOCTORS.indexOf(dname)<0){ DOCTORS.push(dname); saveLists(); }
+      buildDocSelect();
+      document.getElementById('f-doc').value = dname;
+    } else { e.target.value=''; }
+  }
+});
+
+function openListManager(){ renderListManager(); document.getElementById('list-modal').className = 'overlay on'; }
+function closeListManager(){
+  document.getElementById('list-modal').className = 'overlay';
+  buildHospSelect(); buildDocSelect(); renderClaimInsurerSelect();
+}
+function renderListManager(){
+  function rowsFor(list, type){
+    if(!list.length) return '<div style="font-size:13px;color:#bbb;padding:6px 0">None yet.</div>';
+    return list.map(function(v){
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f0efeb">'
+        +'<span style="font-size:13px;font-weight:600">'+v+'</span>'
+        +'<button onclick="removeListItem(\''+type+'\',\''+v.replace(/'/g,"\\'")+'\')" style="padding:5px 9px;background:#fdf0ef;color:#c0392b;border:1px solid #f5c0bb;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">✕</button>'
+        +'</div>';
+    }).join('');
+  }
+  document.getElementById('hosp-list').innerHTML = rowsFor(HOSPITALS,'hosp');
+  document.getElementById('doc-list').innerHTML = rowsFor(DOCTORS,'doc');
+  document.getElementById('ins-list').innerHTML = rowsFor(INSURERS,'ins');
+}
+function addListItem(type){
+  var inputId = 'new-'+type+'-name';
+  var name = (document.getElementById(inputId).value||'').trim();
+  if(!name){ toast('Type a name first'); return; }
+  var list = type==='hosp'?HOSPITALS:type==='doc'?DOCTORS:INSURERS;
+  if(list.some(function(v){return v.toLowerCase()===name.toLowerCase();})){ toast('Already in the list'); return; }
+  list.push(name);
+  saveLists();
+  document.getElementById(inputId).value='';
+  renderListManager();
+  toast('✓ Added');
+}
+function removeListItem(type, name){
+  if(!confirm('Remove "'+name+'"? Existing entries keep this name — you just won\'t see it as an option for new ones.')) return;
+  if(type==='hosp') HOSPITALS = HOSPITALS.filter(function(v){return v!==name;});
+  else if(type==='doc') DOCTORS = DOCTORS.filter(function(v){return v!==name;});
+  else INSURERS = INSURERS.filter(function(v){return v!==name;});
+  saveLists();
+  renderListManager();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INSURANCE CLAIMS
+// ═══════════════════════════════════════════════════════════════════════════
+var editingClaimId = null, claimPickedIds = [];
+
+function renderClaimInsurerSelect(){
+  var sel = document.getElementById('claim-insurer');
+  if(!sel) return;
+  sel.innerHTML = INSURERS.map(function(i){return '<option value="'+i+'">'+i+'</option>';}).join('') || '<option value="">Add an insurer in Settings first</option>';
+}
+function openClaimModal(id){
+  renderClaimInsurerSelect();
+  if(id){
+    var c=null; for(var i=0;i<claims.length;i++){ if(claims[i].id===id){c=claims[i];break;} }
+    if(!c) return;
+    editingClaimId = id;
+    claimPickedIds = (c.entryIds||[]).slice();
+    document.getElementById('claim-m-title').textContent = 'Edit Insurance Claim';
+    document.getElementById('claim-insurer').value = c.insurer||'';
+    document.getElementById('claim-date').value = c.date||'';
+    document.getElementById('claim-note').value = c.note||'';
+    document.getElementById('claim-received').value = c.receivedAmount||'';
+    document.getElementById('claim-del').style.display='block';
+  } else {
+    editingClaimId = null;
+    claimPickedIds = [];
+    document.getElementById('claim-m-title').textContent = 'New Insurance Claim';
+    document.getElementById('claim-date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('claim-note').value = '';
+    document.getElementById('claim-received').value = '';
+    document.getElementById('claim-del').style.display='none';
+  }
+  renderClaimEntryPicker();
+  document.getElementById('claim-modal').className = 'overlay on';
+}
+function closeClaimModal(){ document.getElementById('claim-modal').className='overlay'; editingClaimId=null; claimPickedIds=[]; }
+function renderClaimEntryPicker(){
+  var withCost = entries.filter(function(e){return e.cost>0;}).slice().sort(function(a,b){return b.date.localeCompare(a.date);});
+  var box = document.getElementById('claim-entry-picker');
+  if(!withCost.length){ box.innerHTML = '<div class="empty">No expenses to link yet.</div>'; return; }
+  box.innerHTML = withCost.map(function(e){
+    var checked = claimPickedIds.indexOf(e.id)>=0 ? 'checked' : '';
+    return '<label style="display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid #f5f4f1;font-size:13px;cursor:pointer">'
+      +'<input type="checkbox" '+checked+' onchange="toggleClaimEntry('+e.id+',this.checked)" style="width:auto;flex-shrink:0">'
+      +'<span style="flex:1">'+fmtDate(e.date)+' — '+(e.name||e.sub||e.cat)+'</span>'
+      +'<strong>'+fmtMoney(e.cost)+'</strong>'
+      +'</label>';
+  }).join('');
+  updateClaimBill();
+}
+function toggleClaimEntry(id, checked){
+  if(checked){ if(claimPickedIds.indexOf(id)<0) claimPickedIds.push(id); }
+  else { claimPickedIds = claimPickedIds.filter(function(x){return x!==id;}); }
+  updateClaimBill();
+}
+function updateClaimBill(){
+  var bill = claimPickedIds.reduce(function(s,id){
+    var e = entries.find(function(x){return x.id===id;});
+    return s + (e ? (e.cost||0) : 0);
+  }, 0);
+  document.getElementById('claim-bill').value = fmtMoney(bill);
+}
+function claimBillAmount(c){
+  return (c.entryIds||[]).reduce(function(s,id){
+    var e = entries.find(function(x){return x.id===id;});
+    return s + (e ? (e.cost||0) : 0);
+  }, 0);
+}
+function saveClaim(){
+  var insurer = document.getElementById('claim-insurer').value;
+  var date = document.getElementById('claim-date').value;
+  var note = document.getElementById('claim-note').value.trim();
+  var received = parseFloat(document.getElementById('claim-received').value)||0;
+  if(!insurer){ toast('Pick an insurer (add one in Settings if needed)'); return; }
+  if(!claimPickedIds.length){ toast('Tick at least one expense'); return; }
+  if(editingClaimId){
+    for(var i=0;i<claims.length;i++){
+      if(claims[i].id===editingClaimId){ claims[i].insurer=insurer; claims[i].date=date; claims[i].note=note; claims[i].receivedAmount=received; claims[i].entryIds=claimPickedIds.slice(); break; }
+    }
+    toast('✓ Claim updated');
+  } else {
+    claims.push({id:Date.now(), insurer:insurer, date:date, note:note, receivedAmount:received, entryIds:claimPickedIds.slice()});
+    toast('✓ Claim added');
+  }
+  saveLists();
+  closeClaimModal();
+  renderExpenses(); renderSummary();
+}
+function deleteClaim(){
+  if(!editingClaimId) return;
+  if(!confirm('Delete this insurance claim?')) return;
+  claims = claims.filter(function(c){return c.id!==editingClaimId;});
+  saveLists();
+  closeClaimModal();
+  renderExpenses(); renderSummary();
+  toast('Deleted');
+}
+function entryClaimBadge(entryId){
+  var c = claims.find(function(cl){ return (cl.entryIds||[]).indexOf(entryId)>=0; });
+  if(!c) return '';
+  var bill = claimBillAmount(c);
+  return '🛡️ '+c.insurer+': '+fmtMoney(c.receivedAmount||0)+' of '+fmtMoney(bill)+' recovered';
+}
+function claimsTotals(){
+  var byInsurer = {}, totalReceived = 0;
+  claims.forEach(function(c){
+    var bill = claimBillAmount(c);
+    if(!byInsurer[c.insurer]) byInsurer[c.insurer] = {bill:0, received:0};
+    byInsurer[c.insurer].bill += bill;
+    byInsurer[c.insurer].received += (c.receivedAmount||0);
+    totalReceived += (c.receivedAmount||0);
+  });
+  return {byInsurer:byInsurer, totalReceived:totalReceived};
+}
+function renderInsurance(){
+  var t = claimsTotals();
+  var totalSpent = entries.reduce(function(s,e){return s+(e.cost||0);},0);
+  document.getElementById('ins-recovered').textContent = fmtMoney(t.totalReceived);
+  document.getElementById('ins-net').textContent = fmtMoney(totalSpent - t.totalReceived);
+  var ikeys = Object.keys(t.byInsurer);
+  document.getElementById('ins-by-insurer').innerHTML = ikeys.length
+    ? ikeys.map(function(k){ var v=t.byInsurer[k]; return '<div class="sum-row"><div class="sum-l"><strong>'+k+'</strong><span style="color:#999;font-size:12px">billed '+fmtMoney(v.bill)+'</span></div><strong>'+fmtMoney(v.received)+'</strong></div>'; }).join('')
+    : '';
+  var sorted = claims.slice().sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
+  document.getElementById('ins-claim-list').innerHTML = sorted.length
+    ? sorted.map(function(c){
+        var bill = claimBillAmount(c);
+        return '<div class="record-item" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0efeb">'
+          +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+c.insurer+' — '+fmtDate(c.date)+'</div>'
+          +'<div style="font-size:12px;color:#999;margin-top:2px">Billed '+fmtMoney(bill)+' · Received '+fmtMoney(c.receivedAmount||0)+(c.note?' · '+c.note:'')+'</div></div>'
+          +'<button class="btn-sm" onclick="openClaimModal('+c.id+')">✎</button>'
+          +'</div>';
+      }).join('')
+    : '<div class="empty">No insurance claims yet.</div>';
+}
+function renderInsuranceSummaryHTML(){
+  var t = claimsTotals();
+  var totalSpent = entries.reduce(function(s,e){return s+(e.cost||0);},0);
+  if(!claims.length) return '<div class="empty">No insurance claims yet.</div>';
+  var ikeys = Object.keys(t.byInsurer);
+  var html = '<div class="sum-row" style="font-weight:700"><div class="sum-l">Total recovered</div><span style="color:#1a6b4a">'+fmtMoney(t.totalReceived)+'</span></div>'
+    + '<div class="sum-row" style="font-weight:700"><div class="sum-l">Net out-of-pocket</div><span>'+fmtMoney(totalSpent - t.totalReceived)+'</span></div>';
+  html += ikeys.map(function(k){ var v=t.byInsurer[k]; return '<div class="sum-row" style="padding-left:14px;font-size:12px;color:#666"><div class="sum-l">– '+k+'</div><span>'+fmtMoney(v.received)+' of '+fmtMoney(v.bill)+'</span></div>'; }).join('');
+  return html;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CLEAN UP NAMES
+// ═══════════════════════════════════════════════════════════════════════════
+var cleanupField = 'sub';
+var CLEANUP_FIELDS = [['sub','Subtype'],['name','Name'],['episode','Episode']];
+function openCleanupTool(){ renderCleanupChips(); renderCleanupList(); document.getElementById('cleanup-modal').className = 'overlay on'; }
+function closeCleanupTool(){ document.getElementById('cleanup-modal').className='overlay'; }
+function renderCleanupChips(){
+  document.getElementById('cleanup-field-chips').innerHTML = CLEANUP_FIELDS.map(function(f){
+    return '<button class="chip'+(cleanupField===f[0]?' on':'')+'" onclick="setCleanupField(\''+f[0]+'\')">'+f[1]+'</button>';
+  }).join('');
+}
+function setCleanupField(f){ cleanupField=f; renderCleanupChips(); renderCleanupList(); }
+function renderCleanupList(){
+  var counts = {};
+  entries.forEach(function(e){
+    var v=(e[cleanupField]||'').trim();
+    if(!v) return;
+    counts[v] = (counts[v]||0)+1;
+  });
+  var keys = Object.keys(counts).sort(function(a,b){return counts[b]-counts[a];});
+  var box = document.getElementById('cleanup-list');
+  if(!keys.length){ box.innerHTML = '<div class="empty">No values yet for this field.</div>'; return; }
+  box.innerHTML = keys.map(function(v){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #f0efeb">'
+      +'<span style="font-size:13px">'+v+' <span style="color:#bbb;font-size:11px">('+counts[v]+' entr'+(counts[v]===1?'y':'ies')+')</span></span>'
+      +'<button class="btn-sm" onclick="renameFieldValue(\''+v.replace(/'/g,"\\'")+'\')">✎ Rename</button>'
+      +'</div>';
+  }).join('');
+}
+function renameFieldValue(oldVal){
+  var newVal = prompt('Rename "'+oldVal+'" to:', oldVal);
+  if(!newVal || !newVal.trim() || newVal.trim()===oldVal) return;
+  newVal = newVal.trim();
+  var count=0;
+  entries.forEach(function(e){
+    if((e[cleanupField]||'').trim()===oldVal){ e[cleanupField]=newVal; count++; }
+  });
+  saveData(); renderCleanupList(); updateHeader();
+  if(curPage==='timeline'){ buildChips(); renderTimeline(); }
+  if(curPage==='expenses') renderExpenses();
+  if(curPage==='summary') renderSummary();
+  toast('✓ Updated '+count+' entr'+(count===1?'y':'ies'));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// IMPORT BLOOD EXCEL
+// ═══════════════════════════════════════════════════════════════════════════
+function importBloodExcel(ev){
+  var file=ev.target.files[0]; if(!file) return;
+  if(typeof XLSX==='undefined'){ toast('Loading Excel library…'); loadXLSX(function(){ importBloodExcel(ev); }); return; }
+  var r=new FileReader();
+  r.onload=function(e){
+    try{
+      var data = new Uint8Array(e.target.result);
+      var wb = XLSX.read(data, {type:'array', cellDates:true});
+      var wsAll = wb.Sheets['All Parameters'];
+      var wsKey = wb.Sheets['Key Parameters'];
+      if(!wsAll){ toast('No "All Parameters" tab found in this file'); return; }
+      var parsedAll = parseBloodSheet(wsAll);
+      var keyNameSet = {};
+      if(wsKey){
+        var parsedKey = parseBloodSheet(wsKey);
+        parsedKey.paramNames.forEach(function(n){ keyNameSet[n.toLowerCase()]=1; });
+      }
+      var known = {};
+      allBloodParams().forEach(function(p){ known[p[0].trim().toLowerCase()]=1; });
+      var newParams = [];
+      parsedAll.paramNames.forEach(function(n){
+        var k = n.trim().toLowerCase();
+        if(!known[k] && !newParams.some(function(x){return x.name.toLowerCase()===k;})){
+          newParams.push({name:n, unit:parsedAll.paramMeta[n].unit, ref:parsedAll.paramMeta[n].ref, section:parsedAll.paramMeta[n].section});
+        }
+      });
+      var reportCount = Object.keys(parsedAll.reports).length;
+      var newList = newParams.length ? ('\n\nNew parameters to be added: '+newParams.map(function(p){return p.name;}).join(', ')) : '';
+      if(!confirm('Import '+reportCount+' blood report(s) from this Excel?\n\nThis will REPLACE all existing blood report data.'+newList)) return;
+
+      var newReports = Object.keys(parsedAll.reports).map(function(k, i){
+        var parts = k.split('|||');
+        return {id: Date.now()+i, date: parts[0], lab: parts[1], values: parsedAll.reports[k]};
+      });
+      bloodReports = newReports;
+      newParams.forEach(function(p){
+        customParams.push([p.name, p.unit||'', p.ref||'', (p.section||'CUSTOM PARAMETERS').toUpperCase(), keyNameSet[p.name.toLowerCase()]?1:0]);
+      });
+      parsedAll.paramNames.forEach(function(n){
+        keyOverrides[n] = keyNameSet[n.toLowerCase()] ? 1 : 0;
+      });
+      saveBlood();
+      document.getElementById('imp-blood-xlsx').value='';
+      renderBloodPage();
+      toast('✓ Imported '+reportCount+' reports, '+newParams.length+' new parameter(s)');
+    }catch(err){ toast('Could not read Excel file'); console.error(err); }
+  };
+  r.readAsArrayBuffer(file);
+}
+function parseBloodSheet(ws){
+  var range = XLSX.utils.decode_range(ws['!ref']);
+  function cell(r,c){ var addr = XLSX.utils.encode_cell({r:r,c:c}); var cl = ws[addr]; return cl ? cl.v : undefined; }
+  var headerRow=-1, paramCol=-1;
+  for(var r=range.s.r; r<=Math.min(range.s.r+5, range.e.r); r++){
+    for(var c=range.s.c; c<=Math.min(range.s.c+5, range.e.c); c++){
+      var v = cell(r,c);
+      if(typeof v==='string' && v.trim().toLowerCase()==='parameter'){ headerRow=r; paramCol=c; break; }
+    }
+    if(headerRow>=0) break;
+  }
+  var out = {reports:{}, paramNames:[], paramMeta:{}};
+  if(headerRow<0) return out;
+  var dateCols = [];
+  for(var c2=paramCol+3; c2<=range.e.c; c2++){
+    var hv = cell(headerRow, c2);
+    if(hv===undefined || hv==='') break;
+    var dstr;
+    if(hv instanceof Date) dstr = fmtExcelDate(hv);
+    else dstr = String(hv);
+    dateCols.push({col:c2, date:dstr});
+  }
+  var labRow = headerRow+1;
+  var labs = {};
+  dateCols.forEach(function(dc){ labs[dc.col] = String(cell(labRow,dc.col) || '').trim(); });
+
+  var section = null;
+  for(var row=labRow+1; row<=range.e.r; row++){
+    var name = cell(row, paramCol);
+    var unit = cell(row, paramCol+1);
+    var ref = cell(row, paramCol+2);
+    var hasVal = dateCols.some(function(dc){ var v=cell(row,dc.col); return v!==undefined && v!==''; });
+    if(name===undefined || name==='') continue;
+    name = String(name).trim();
+    if(!unit && !ref && !hasVal){
+      section = name;
+      continue;
+    }
+    if(!out.paramMeta[name]){
+      out.paramNames.push(name);
+      out.paramMeta[name] = {unit: unit?String(unit).trim():'', ref: ref?String(ref).trim():'', section: section||'OTHER'};
+    }
+    dateCols.forEach(function(dc){
+      var v = cell(row, dc.col);
+      if(v===undefined || v==='') return;
+      var key = dc.date+'|||'+(labs[dc.col]||'');
+      if(!out.reports[key]) out.reports[key] = {};
+      out.reports[key][name] = v;
+    });
+  }
+  return out;
+}
+function fmtExcelDate(d){
+  var y=d.getUTCFullYear ? d.getUTCFullYear() : d.getFullYear();
+  var m=(d.getUTCMonth ? d.getUTCMonth() : d.getMonth())+1;
+  var da=d.getUTCDate ? d.getUTCDate() : d.getDate();
+  return y+'-'+String(m).padStart(2,'0')+'-'+String(da).padStart(2,'0');
 }
 </script>
 </body>
