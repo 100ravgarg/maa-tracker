@@ -1110,12 +1110,17 @@ function renderExpenses(){
 
 function renderTypeBreakdownHTML(){
   var byCat={}, byCatSub={};
+  var catSessions = {}, catSubSessions = {};
   entries.forEach(function(e){
     if(!byCat[e.cat]) byCat[e.cat]={n:0,t:0};
-    byCat[e.cat].n++; byCat[e.cat].t+=e.cost||0;
+    byCat[e.cat].t+=e.cost||0;
+    var sessKey = e.cat+'|||'+e.date;
+    if(!catSessions[sessKey]){ catSessions[sessKey]=1; byCat[e.cat].n++; }
     var sk = e.cat+'|||'+(e.sub||e.cat);
     if(!byCatSub[sk]) byCatSub[sk]={cat:e.cat,sub:e.sub||e.cat,n:0,t:0};
-    byCatSub[sk].n++; byCatSub[sk].t+=e.cost||0;
+    byCatSub[sk].t+=e.cost||0;
+    var subSessKey = sk+'|||'+e.date;
+    if(!catSubSessions[subSessKey]){ catSubSessions[subSessKey]=1; byCatSub[sk].n++; }
   });
   var catKeys = Object.keys(byCat).sort(function(a,b){return byCat[b].t-byCat[a].t;});
   if(!catKeys.length) return '<div class="empty">No entries yet.</div>';
