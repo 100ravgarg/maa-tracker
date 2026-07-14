@@ -2444,25 +2444,7 @@ var SEED_NOTES=[{"id": 1781206081542, "type": "doctor", "title": "Nose wounds", 
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 // If opened via a shared link, show the read-only blood viewer and stop.
-if(checkForSharedData()){
-  // Doctor view — don't load the personal app behind it
-} else {
-loadData();
-loadBlood();
-loadNotes();
-loadLists();
-document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
-buildCatSelect();
-onCatChange();
-buildHospSelect();
-buildDocSelect();
-refreshDatalists();
-buildChips();
-updateHeader();
-nav('summary');
-// Connect to Firebase for live shared sync (everyone sees the same data)
-fbInit();
-}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // MANAGED LISTS: Hospitals, Doctors, Insurers
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2867,6 +2849,25 @@ function fmtExcelDate(d){
   var m=(d.getUTCMonth ? d.getUTCMonth() : d.getMonth())+1;
   var da=d.getUTCDate ? d.getUTCDate() : d.getDate();
   return y+'-'+String(m).padStart(2,'0')+'-'+String(da).padStart(2,'0');
+}
+if(checkForSharedData()){
+  // Doctor view — don't load the personal app behind it
+} else {
+loadData();
+loadBlood();
+loadNotes();
+loadLists();
+document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
+buildCatSelect();
+onCatChange();
+buildHospSelect();
+buildDocSelect();
+refreshDatalists();
+buildChips();
+updateHeader();
+nav('summary');
+// Connect to Firebase for live shared sync (everyone sees the same data)
+fbInit();
 }
 </script>
 </body>
