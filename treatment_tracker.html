@@ -136,6 +136,10 @@ body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;font-size:15px;backg
       <input type="text" id="f-episode" list="dl-episode" placeholder="e.g. Cough workup, Cycle 2-P3" autocomplete="off">
       <datalist id="dl-episode"></datalist>
     </div>
+    <div class="row2">
+      <div class="fg"><label>Cycle <span style="font-weight:400;color:#bbb">(optional)</span></label><input type="number" id="f-cycle" placeholder="e.g. 2" min="1"></div>
+      <div class="fg"><label>Part <span style="font-weight:400;color:#bbb">(optional)</span></label><input type="number" id="f-part" placeholder="e.g. 3" min="1"></div>
+    </div>
     <div class="slabel">Doctor</div>
     <div class="row2">
       <div class="fg"><label>Doctor name</label>
@@ -184,6 +188,10 @@ body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;font-size:15px;backg
 <div class="pg" id="pg-timeline">
   <div style="height:14px"></div>
   <div class="chips" id="chips"></div>
+  <div class="chips">
+    <button class="chip on" id="tl-view-date" onclick="setTimelineView('date')">📅 By Date</button>
+    <button class="chip" id="tl-view-cycle" onclick="setTimelineView('cycle')">🔁 By Cycle</button>
+  </div>
   <div id="tl-list"></div>
 </div>
 
@@ -913,10 +921,14 @@ function addEntry(){
   var cat = document.getElementById('f-cat').value;
   var sub = subVal.trim() || cat;
   rememberSub(cat, sub);
+  var cycleVal = document.getElementById('f-cycle').value;
+  var partVal = document.getElementById('f-part').value;
   var data = {
     date: date, cat: cat, sub: sub,
     name: document.getElementById('f-name').value.trim(),
     episode: document.getElementById('f-episode').value.trim(),
+    cycle: cycleVal ? parseInt(cycleVal,10) : null,
+    part: partVal ? parseInt(partVal,10) : null,
     doc:  docVal.trim(),
     spec: specVal.trim(),
     ordered: orderedVal.trim(),
@@ -940,14 +952,7 @@ function addEntry(){
 }
 function clearForm(){
   pendingDriveFile=null; var _dp=document.getElementById('drive-prev'); if(_dp)_dp.innerHTML='';
-  ['f-name','f-episode','f-spec','f-ordered','f-remark','f-sub','f-doc','f-hosp'].forEach(function(id){ document.getElementById(id).value=''; });
-  document.getElementById('f-cost').value='';
-  document.getElementById('f-paid').value='';
-  pendingFile=null; document.getElementById('file-prev').innerHTML=''; document.getElementById('f-file').value='';
-}
-function clearForm(){
-  pendingDriveFile=null; var _dp=document.getElementById('drive-prev'); if(_dp)_dp.innerHTML='';
-  ['f-name','f-episode','f-doc','f-spec','f-ordered','f-hosp','f-remark','f-sub'].forEach(function(id){ document.getElementById(id).value=''; });
+  ['f-name','f-episode','f-spec','f-ordered','f-remark','f-sub','f-doc','f-hosp','f-cycle','f-part'].forEach(function(id){ document.getElementById(id).value=''; });
   document.getElementById('f-cost').value='';
   document.getElementById('f-paid').value='';
   pendingFile=null; document.getElementById('file-prev').innerHTML=''; document.getElementById('f-file').value='';
@@ -961,6 +966,8 @@ function startEdit(id){
   if(e.sub) rememberSub(e.cat, e.sub);
   document.getElementById('f-name').value = e.name||'';
   document.getElementById('f-episode').value = e.episode||'';
+  document.getElementById('f-cycle').value = e.cycle||'';
+  document.getElementById('f-part').value = e.part||'';
   if(e.hosp && HOSPITALS.indexOf(e.hosp)<0){ HOSPITALS.push(e.hosp); saveLists(); }
   if(e.doc && DOCTORS.indexOf(e.doc)<0){ DOCTORS.push(e.doc); saveLists(); }
   if(e.ordered && e.ordered!=='Self' && DOCTORS.indexOf(e.ordered)<0){ DOCTORS.push(e.ordered); saveLists(); }
@@ -971,7 +978,8 @@ function startEdit(id){
   document.getElementById('f-spec').value = e.spec||'';
   document.getElementById('f-ordered').value = e.ordered||'Self';
   document.getElementById('f-hosp').value = e.hosp||'';
-  document.getElementById('f-cost').value = e.cost||'';  document.getElementById('f-paid').value = e.paid||'';
+  document.getElementById('f-cost').value = e.cost||'';
+  document.getElementById('f-paid').value = e.paid||'';
   document.getElementById('f-remark').value = e.remark||'';
   pendingDriveFile=null; var _edp=document.getElementById('drive-prev'); if(_edp) _edp.innerHTML = e.driveFile ? driveChipHTML(e.driveFile) : '';
   document.getElementById('add-card-ttl').textContent = 'Edit Entry';
@@ -980,13 +988,6 @@ function startEdit(id){
   closeModal();
   nav('add');
   window.scrollTo(0,0);
-}
-function cancelEdit(){
-  editingId = null;
-  document.getElementById('add-card-ttl').textContent = 'New Entry';
-  document.getElementById('add-btn').textContent = '+ Add Entry';
-  document.getElementById('cancel-edit-btn').style.display = 'none';
-  clearForm();
 }
 
 // ─── CATEGORY + SUBTYPE FORM ──────────────────────────────────────────────────
@@ -1039,6 +1040,13 @@ function buildChips(){
 }
 function setFilter(f){ curFilter=f; buildChips(); renderTimeline(); }
 
+var timelineView = 'date';
+function setTimelineView(v){
+  timelineView=v;
+  document.getElementById('tl-view-date').className = 'chip'+(v==='date'?' on':'');
+  document.getElementById('tl-view-cycle').className = 'chip'+(v==='cycle'?' on':'');
+  renderTimeline();
+}
 function renderTimeline(){
   var list = document.getElementById('tl-list');
   var data = entries;
@@ -1052,6 +1060,7 @@ function renderTimeline(){
     }
     else data=entries.filter(function(e){return e.cat===curFilter;});
   }
+  if(timelineView==='cycle'){ renderTimelineByCycle(data); return; }
   if(!data.length){ list.innerHTML='<div class="empty">No entries'+(curFilter!=='all'?' for this filter':'')+'.<br>Switch to the Add tab to create one.</div>'; return; }
 
   // Group by date, with month headers
@@ -1060,7 +1069,6 @@ function renderTimeline(){
     var d=parseD(e.date);
     var monthKey = d ? d.getFullYear()+'-'+d.getMonth() : 'x';
     if(monthKey!==lastMonth){
-      // Month header with that month's totals
       var mName = d ? d.toLocaleDateString('en-IN',{month:'long',year:'numeric'}) : '';
       var mEntries = data.filter(function(x){ var dd=parseD(x.date); return dd && (dd.getFullYear()+'-'+dd.getMonth())===monthKey; });
       var mSpend = mEntries.reduce(function(s,x){return s+(x.cost||0);},0);
@@ -1077,6 +1085,40 @@ function renderTimeline(){
     }
     html += entryCardHTML(e);
   });
+  list.innerHTML = html;
+}
+function renderTimelineByCycle(data){
+  var list = document.getElementById('tl-list');
+  var withCycle = data.filter(function(e){return e.cycle;});
+  var withoutCycle = data.filter(function(e){return !e.cycle;});
+  if(!withCycle.length && !withoutCycle.length){ list.innerHTML='<div class="empty">No entries'+(curFilter!=='all'?' for this filter':'')+'.<br>Switch to the Add tab to create one.</div>'; return; }
+  var cycles = {};
+  withCycle.forEach(function(e){ if(!cycles[e.cycle]) cycles[e.cycle]=[]; cycles[e.cycle].push(e); });
+  var cycleNums = Object.keys(cycles).map(Number).sort(function(a,b){return b-a;});
+  var html = '';
+  cycleNums.forEach(function(cn){
+    var ents = cycles[cn];
+    var total = ents.reduce(function(s,e){return s+(e.cost||0);},0);
+    html += '<div style="display:flex;justify-content:space-between;align-items:baseline;margin:18px 2px 8px;padding-bottom:5px;border-bottom:2px solid #e4e2db">'
+      +'<span style="font-size:15px;font-weight:800;color:#1a6b4a">Cycle '+cn+'</span>'
+      +'<span style="font-size:11px;color:#999">'+ents.length+' events · '+fmtMoney(total)+'</span></div>';
+    var partsMap = {}; var noPart = [];
+    ents.forEach(function(e){ if(e.part){ if(!partsMap[e.part]) partsMap[e.part]=[]; partsMap[e.part].push(e); } else noPart.push(e); });
+    var partNums = Object.keys(partsMap).map(Number).sort(function(a,b){return a-b;});
+    partNums.forEach(function(pn){
+      html += '<div style="font-size:13px;font-weight:700;color:#555;margin:12px 2px 6px">Part '+pn+'</div>';
+      partsMap[pn].slice().sort(function(a,b){return b.date.localeCompare(a.date);}).forEach(function(e){ html += entryCardHTML(e); });
+    });
+    if(noPart.length){
+      if(partNums.length) html += '<div style="font-size:13px;font-weight:700;color:#555;margin:12px 2px 6px">Not part-specific</div>';
+      noPart.slice().sort(function(a,b){return b.date.localeCompare(a.date);}).forEach(function(e){ html += entryCardHTML(e); });
+    }
+  });
+  if(withoutCycle.length){
+    html += '<div style="display:flex;justify-content:space-between;align-items:baseline;margin:22px 2px 8px;padding-bottom:5px;border-bottom:2px solid #e4e2db">'
+      +'<span style="font-size:14px;font-weight:700;color:#888">Not linked to a cycle</span></div>';
+    withoutCycle.slice().sort(function(a,b){return b.date.localeCompare(a.date);}).forEach(function(e){ html += entryCardHTML(e); });
+  }
   list.innerHTML = html;
 }
 
@@ -1249,9 +1291,9 @@ function updateHeader(){
 // ─── EXPORT CSV ───────────────────────────────────────────────────────────────
 function exportCSV(){
   if(!entries.length){toast('No entries yet');return;}
-  var hdr='Date,Category,Subtype,Name/Details,Episode,Doctor,Speciality,Ordered By,Hospital/Lab,Cost (INR),Paid By,Remarks,Document,Drive Link';
+  var hdr='Date,Category,Subtype,Name/Details,Episode,Cycle,Part,Doctor,Speciality,Ordered By,Hospital/Lab,Cost (INR),Paid By,Remarks,Document,Drive Link';
   var rows=entries.map(function(e){
-    return [e.date,e.cat,e.sub,e.name,e.episode,e.doc,e.spec,e.ordered,e.hosp,e.cost||0,e.paid||'',e.remark,e.file?e.file.name:'',e.driveFile?e.driveFile.url:'']
+    return [e.date,e.cat,e.sub,e.name,e.episode,e.cycle||'',e.part||'',e.doc,e.spec,e.ordered,e.hosp,e.cost||0,e.paid||'',e.remark,e.file?e.file.name:'',e.driveFile?e.driveFile.url:'']
       .map(function(v){return '"'+String(v||'').replace(/"/g,'""').replace(/\n/g,' ')+'"';}).join(',');
   });
   var csv='\uFEFF'+[hdr].concat(rows).join('\r\n');
@@ -1315,7 +1357,7 @@ function importCSV(ev){
       if(lines.length<2){toast('File appears empty');return;}
       var hdrs=parseCSVLine(lines[0]).map(function(h){return h.trim().toLowerCase();});
       function col(n){return hdrs.findIndex(function(h){return h.includes(n);});}
-      var iD=col('date'),iCat=col('category'),iSub=col('subtype'),iTy=col('type'),iN=col('name'),iEp=col('episode'),iDo=col('doctor'),iSp=col('spec'),iOr=col('ordered'),iHo=col('hospital'),iC=col('cost'),iP=col('paid'),iR=col('remark');
+      var iD=col('date'),iCat=col('category'),iSub=col('subtype'),iTy=col('type'),iN=col('name'),iEp=col('episode'),iCyc=col('cycle'),iPart=col('part'),iDo=col('doctor'),iSp=col('spec'),iOr=col('ordered'),iHo=col('hospital'),iC=col('cost'),iP=col('paid'),iR=col('remark');
       if(iD===-1){toast('Cannot read CSV — use the exported file');return;}
       // Map old single-type labels to cat/sub if no Category column present
       var typeMap={'chemotherapy':['Treatment','Chemotherapy'],'immunotherapy':['Treatment','Immunotherapy'],'blood test':['Lab Test','Blood Test'],'usg / ultrasound':['Imaging','USG'],'pet scan':['Imaging','PET Scan'],'mri':['Imaging','MRI'],'x-ray':['Imaging','X-Ray'],'surgery':['Treatment','Surgery'],'consultation':['Consultation','Consultation']};
@@ -1333,6 +1375,8 @@ function importCSV(ev){
           cat:cat, sub:sub,
           name:iN>=0?(cols[iN]||'').trim():'',
           episode:iEp>=0?(cols[iEp]||'').trim():'',
+          cycle:iCyc>=0&&cols[iCyc]?parseInt(cols[iCyc],10):null,
+          part:iPart>=0&&cols[iPart]?parseInt(cols[iPart],10):null,
           doc:iDo>=0?(cols[iDo]||'').trim():'',
           spec:iSp>=0?(cols[iSp]||'').trim():'',
           ordered:iOr>=0?(cols[iOr]||'').trim():'',
