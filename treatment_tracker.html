@@ -2876,9 +2876,11 @@ function claimsTotals(){
 function renderInsurance(){
   var t = claimsTotals();
   var totalSpent = entries.reduce(function(s,e){return s+(e.cost||0);},0);
+  var ikeys = Object.keys(t.byInsurer);
+  var totalBilled = ikeys.reduce(function(s,k){return s+t.byInsurer[k].bill;},0);
+  document.getElementById('ins-billed').textContent = fmtMoney(totalBilled);
   document.getElementById('ins-recovered').textContent = fmtMoney(t.totalReceived);
   document.getElementById('ins-net').textContent = fmtMoney(totalSpent - t.totalReceived);
-  var ikeys = Object.keys(t.byInsurer);
   document.getElementById('ins-by-insurer').innerHTML = ikeys.length
     ? ikeys.map(function(k){ var v=t.byInsurer[k]; return '<div class="sum-row"><div class="sum-l"><strong>'+k+'</strong><span style="color:#999;font-size:12px">billed '+fmtMoney(v.bill)+'</span></div><strong>'+fmtMoney(v.received)+'</strong></div>'; }).join('')
     : '';
