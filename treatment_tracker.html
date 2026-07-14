@@ -128,9 +128,8 @@ body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;font-size:15px;backg
       <div class="fg"><label>Category</label><select id="f-cat" onchange="onCatChange()"></select></div>
     </div>
     <div class="fg"><label>Subtype</label>
-      <input type="text" id="f-sub" list="dl-sub" placeholder="Pick or type…" autocomplete="off">
-      <datalist id="dl-sub"></datalist>
-    </div>
+  <select id="f-sub"></select>
+</div>
     <div class="fg"><label>Name / Details <span style="font-weight:400;color:#bbb">(optional)</span></label>
       <input type="text" id="f-name" placeholder="e.g. Cycle 4, Routine CBC…"></div>
     <div class="fg"><label>Episode / Linked to <span style="font-weight:400;color:#bbb">(optional)</span></label>
@@ -143,13 +142,11 @@ body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;font-size:15px;backg
   <select id="f-doc"></select>
 </div>
       <div class="fg"><label>Speciality</label>
-        <input type="text" id="f-spec" list="dl-spec" placeholder="Pulmonologist" autocomplete="off">
-        <datalist id="dl-spec"></datalist>
+        <select id="f-spec"></select>
       </div>
     </div>
     <div class="fg"><label>Ordered by <span style="font-weight:400;color:#bbb">(for tests)</span></label>
-      <input type="text" id="f-ordered" list="dl-doc2" placeholder="Self or Dr. name" autocomplete="off">
-      <datalist id="dl-doc2"></datalist>
+      <select id="f-ordered"></select>
     </div>
     <div class="slabel">Location &amp; Cost</div>
     <div class="row2">
@@ -471,6 +468,14 @@ Tip: start lines with - for a checklist"></textarea></div>
       <button onclick="addListItem('ins')" style="padding:10px 16px;background:#1a6b4a;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;flex-shrink:0;font-family:inherit">+ Add</button>
     </div>
     <div id="ins-list" style="margin-bottom:14px"></div>
+
+    <div style="font-size:12px;font-weight:700;color:#5a7a5a;text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px">Specialities</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <div class="fg" style="flex:1;margin-bottom:0"><input type="text" id="new-spec-name" placeholder="e.g. Oncologist, Radiologist…"></div>
+      <button onclick="addListItem('spec')" style="padding:10px 16px;background:#1a6b4a;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;flex-shrink:0;font-family:inherit">+ Add</button>
+    </div>
+    <div id="spec-list" style="margin-bottom:14px"></div>
+
     <button onclick="closeListManager()" class="btn-out" style="margin-top:6px">Done</button>
   </div>
 </div>
@@ -896,6 +901,43 @@ function openDriveFile(id){
 }
 
 // ─── ADD / EDIT ENTRY ─────────────────────────────────────────────────────────
+function addEntry(){
+  var date = fixDate(document.getElementById('f-date').value);
+  if(!date){ toast('Please pick a date'); return; }
+  var hospVal = document.getElementById('f-hosp').value;
+  var docVal = document.getElementById('f-doc').value;
+  var subVal = document.getElementById('f-sub').value;
+  var specVal = document.getElementById('f-spec').value;
+  var orderedVal = document.getElementById('f-ordered').value;
+  if(hospVal==='__new__' || docVal==='__new__' || subVal==='__new__' || specVal==='__new__' || orderedVal==='__new__'){ toast('Finish adding the new name first'); return; }
+  var cat = document.getElementById('f-cat').value;
+  var sub = subVal.trim() || cat;
+  rememberSub(cat, sub);
+  var data = {
+    date: date, cat: cat, sub: sub,
+    name: document.getElementById('f-name').value.trim(),
+    episode: document.getElementById('f-episode').value.trim(),
+    doc:  docVal.trim(),
+    spec: specVal.trim(),
+    ordered: orderedVal.trim(),
+    hosp: hospVal.trim(),
+    cost: parseFloat(document.getElementById('f-cost').value)||0,
+    paid: document.getElementById('f-paid').value,
+    remark: document.getElementById('f-remark').value.trim(),
+    driveFile: pendingDriveFile||null
+  };
+  if(editingId){
+    for(var i=0;i<entries.length;i++){ if(entries[i].id===editingId){ var kd=pendingDriveFile||entries[i].driveFile||null; Object.assign(entries[i], data); if(pendingFile) entries[i].file=pendingFile; entries[i].driveFile=kd; break; } }
+    toast('✓ Entry updated');
+  } else {
+    data.id = Date.now(); data.file = pendingFile||null;
+    entries.push(data);
+    toast('✓ Entry added');
+  }
+  entries.sort(function(a,b){return b.date.localeCompare(a.date);});
+  saveData(); updateHeader(); clearForm(); refreshDatalists();
+  if(editingId){ cancelEdit(); nav('timeline'); }
+}
 function clearForm(){
   pendingDriveFile=null; var _dp=document.getElementById('drive-prev'); if(_dp)_dp.innerHTML='';
   ['f-name','f-episode','f-spec','f-ordered','f-remark','f-sub','f-doc','f-hosp'].forEach(function(id){ document.getElementById(id).value=''; });
@@ -916,16 +958,20 @@ function startEdit(id){
   editingId = id;
   document.getElementById('f-date').value = e.date;
   document.getElementById('f-cat').value = e.cat;
-  onCatChange();
-  document.getElementById('f-sub').value = e.sub||'';
+  if(e.sub) rememberSub(e.cat, e.sub);
   document.getElementById('f-name').value = e.name||'';
   document.getElementById('f-episode').value = e.episode||'';
+  if(e.hosp && HOSPITALS.indexOf(e.hosp)<0){ HOSPITALS.push(e.hosp); saveLists(); }
+  if(e.doc && DOCTORS.indexOf(e.doc)<0){ DOCTORS.push(e.doc); saveLists(); }
+  if(e.ordered && e.ordered!=='Self' && DOCTORS.indexOf(e.ordered)<0){ DOCTORS.push(e.ordered); saveLists(); }
+  if(e.spec && SPECIALITIES.indexOf(e.spec)<0){ SPECIALITIES.push(e.spec); saveLists(); }
+  buildHospSelect(); buildDocSelect(); buildSubSelect(); buildSpecSelect(); buildOrderedSelect();
+  document.getElementById('f-sub').value = e.sub||'';
   document.getElementById('f-doc').value = e.doc||'';
   document.getElementById('f-spec').value = e.spec||'';
-  document.getElementById('f-ordered').value = e.ordered||'';
+  document.getElementById('f-ordered').value = e.ordered||'Self';
   document.getElementById('f-hosp').value = e.hosp||'';
-  document.getElementById('f-cost').value = e.cost||'';
-  document.getElementById('f-paid').value = e.paid||'';
+  document.getElementById('f-cost').value = e.cost||'';  document.getElementById('f-paid').value = e.paid||'';
   document.getElementById('f-remark').value = e.remark||'';
   pendingDriveFile=null; var _edp=document.getElementById('drive-prev'); if(_edp) _edp.innerHTML = e.driveFile ? driveChipHTML(e.driveFile) : '';
   document.getElementById('add-card-ttl').textContent = 'Edit Entry';
@@ -949,10 +995,7 @@ function buildCatSelect(){
   sel.innerHTML = CATEGORIES.map(function(c){ return '<option value="'+c.key+'">'+c.key+'</option>'; }).join('');
 }
 function onCatChange(){
-  var cat = document.getElementById('f-cat').value;
-  var def = getCatDef(cat);
-  var subs = def.subs.concat(customSubs[cat]||[]);
-  document.getElementById('dl-sub').innerHTML = subs.map(function(s){ return '<option value="'+s+'">'; }).join('');
+  buildSubSelect();
 }
 function rememberSub(cat, sub){
   var def = getCatDef(cat);
@@ -961,8 +1004,6 @@ function rememberSub(cat, sub){
   if(customSubs[cat].indexOf(sub)<0){ customSubs[cat].push(sub); saveData(); }
 }
 function refreshDatalists(){
-  document.getElementById('dl-spec').innerHTML = distinct('spec').map(function(v){return '<option value="'+v+'">';}).join('');
-  document.getElementById('dl-doc2').innerHTML = ['Self'].concat(distinct('ordered').filter(function(v){return v!=='Self';})).map(function(v){return '<option value="'+v+'">';}).join('');
   document.getElementById('dl-episode').innerHTML = distinct('episode').map(function(v){return '<option value="'+v+'">';}).join('');
 }
 
@@ -1207,8 +1248,8 @@ function exportBackup(){
   var payload={
     entries:entries, customSubs:customSubs, notes:notes, sectionOrder:sectionOrder,
     bloodReports:bloodReports, customParams:customParams, customLabs:customLabs, keyOverrides:keyOverrides,
-    hospitals:HOSPITALS, doctors:DOCTORS, insurers:INSURERS, claims:claims,
-    at:new Date().toISOString(), v:7
+    hospitals:HOSPITALS, doctors:DOCTORS, insurers:INSURERS, specialities:SPECIALITIES, claims:claims,
+    at:new Date().toISOString(), v:8
   };
   dl(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),'maa_backup_'+new Date().toISOString().slice(0,10)+'.json');
   toast('✓ Backup downloaded (incl. blood)');
@@ -1235,10 +1276,11 @@ function restoreBackup(ev){
       if(d.hospitals) HOSPITALS=d.hospitals;
       if(d.doctors) DOCTORS=d.doctors;
       if(d.insurers) INSURERS=d.insurers;
+      if(d.specialities) SPECIALITIES=d.specialities;
       if(d.claims) claims=d.claims;
       reconcileLists();
       saveBlood(); saveLists();
-      saveData(); buildChips(); updateHeader(); renderSettings(); refreshDatalists(); buildHospSelect(); buildDocSelect();
+      saveData(); buildChips(); updateHeader(); renderSettings(); refreshDatalists(); buildHospSelect(); buildDocSelect(); buildSpecSelect(); buildOrderedSelect();
       document.getElementById('imp-bak').value='';
       toast('✓ Restored '+entries.length+' entries'+bloodNote);
     }catch(err){toast('Could not read backup file');}
@@ -1365,6 +1407,7 @@ function collectAllData(){
     hospitals: HOSPITALS,
     doctors: DOCTORS,
     insurers: INSURERS,
+    specialities: SPECIALITIES,
     claims: claims,
     savedAt: Date.now()
   };
@@ -1384,6 +1427,7 @@ function applyAllData(d){
   if(d.hospitals) HOSPITALS = d.hospitals;
   if(d.doctors) DOCTORS = d.doctors;
   if(d.insurers) INSURERS = d.insurers;
+  if(d.specialities) SPECIALITIES = d.specialities;
   if(d.claims) claims = d.claims;
   reconcileLists();
   saveData(); saveNotes(); saveBlood(); saveLists();
@@ -1419,6 +1463,7 @@ function mergeData(local, remote){
     hospitals: mergeStrList(local.hospitals, remote.hospitals),
     doctors: mergeStrList(local.doctors, remote.doctors),
     insurers: mergeStrList(local.insurers, remote.insurers),
+    specialities: mergeStrList(local.specialities, remote.specialities),
     // For settings-like data, prefer whichever was saved most recently
     customSubs: (remote.savedAt>local.savedAt? remote.customSubs : local.customSubs) || local.customSubs || remote.customSubs,
     customParams: (remote.savedAt>local.savedAt? remote.customParams : local.customParams) || local.customParams || remote.customParams,
@@ -2457,12 +2502,14 @@ var HOSPITALS = ['Athenaa','Healthians','Ganga Ram Hospital','Mahajan Lab','Medi
 var DOCTORS = ['Dr. Bhuvan','Dr. Aditi','Dr. Amit Dhamija','Dr. Anshul Mittal','Dr. Chandrashekhar','Dr. Jyoti','Dr. Yogesh','Dr. Saurabh','Dr. Darshit Jain','Dr. Madhwi Chawla','Dr. Sonia','Dr. Madhu','Dr. Amit Bhargava','Dr. Vineet Govinda Gupta','Dr. Shyam Aggarwal','Dr. Anshul','Dr. Kalra'];
 var INSURERS = ['MASIN','KROLL'];
 var claims = [];
+var SPECIALITIES = ['Oncologist','Radiologist','Pulmonologist','Cardiologist','Oncologist Surgeon'];
 
 function loadLists(){
   try{ var h=localStorage.getItem('maa_hospitals'); if(h) HOSPITALS=JSON.parse(h); }catch(e){}
   try{ var d=localStorage.getItem('maa_doctors'); if(d) DOCTORS=JSON.parse(d); }catch(e){}
   try{ var i=localStorage.getItem('maa_insurers'); if(i) INSURERS=JSON.parse(i); }catch(e){}
   try{ var c=localStorage.getItem('maa_claims'); if(c) claims=JSON.parse(c); }catch(e){}
+  try{ var sp=localStorage.getItem('maa_specialities'); if(sp) SPECIALITIES=JSON.parse(sp); }catch(e){}
   reconcileLists();
 }
 function saveLists(){
@@ -2470,6 +2517,7 @@ function saveLists(){
   try{ localStorage.setItem('maa_doctors',JSON.stringify(DOCTORS)); }catch(e){}
   try{ localStorage.setItem('maa_insurers',JSON.stringify(INSURERS)); }catch(e){}
   try{ localStorage.setItem('maa_claims',JSON.stringify(claims)); }catch(e){}
+  try{ localStorage.setItem('maa_specialities',JSON.stringify(SPECIALITIES)); }catch(e){}
   if(typeof fbAutoPush==='function') fbAutoPush();
 }
 // Make sure every hospital/doctor already used in your entries is always in the
@@ -2480,6 +2528,9 @@ function reconcileLists(){
   entries.forEach(function(e){ if(e.hosp && !hset[e.hosp]){ hset[e.hosp]=1; HOSPITALS.push(e.hosp); } });
   var dset={}; DOCTORS.forEach(function(d){dset[d]=1;});
   entries.forEach(function(e){ if(e.doc && !dset[e.doc]){ dset[e.doc]=1; DOCTORS.push(e.doc); } });
+  entries.forEach(function(e){ if(e.ordered && e.ordered!=='Self' && !dset[e.ordered]){ dset[e.ordered]=1; DOCTORS.push(e.ordered); } });
+  var spset={}; SPECIALITIES.forEach(function(s){spset[s]=1;});
+  entries.forEach(function(e){ if(e.spec && !spset[e.spec]){ spset[e.spec]=1; SPECIALITIES.push(e.spec); } });
 }
 function buildHospSelect(){
   var sel = document.getElementById('f-hosp');
@@ -2517,7 +2568,7 @@ document.addEventListener('change', function(e){
 function openListManager(){ renderListManager(); document.getElementById('list-modal').className = 'overlay on'; }
 function closeListManager(){
   document.getElementById('list-modal').className = 'overlay';
-  buildHospSelect(); buildDocSelect(); renderClaimInsurerSelect();
+  buildHospSelect(); buildDocSelect(); buildSpecSelect(); buildOrderedSelect(); renderClaimInsurerSelect();
 }
 function renderListManager(){
   function rowsFor(list, type){
@@ -2532,12 +2583,13 @@ function renderListManager(){
   document.getElementById('hosp-list').innerHTML = rowsFor(HOSPITALS,'hosp');
   document.getElementById('doc-list').innerHTML = rowsFor(DOCTORS,'doc');
   document.getElementById('ins-list').innerHTML = rowsFor(INSURERS,'ins');
+  document.getElementById('spec-list').innerHTML = rowsFor(SPECIALITIES,'spec');
 }
 function addListItem(type){
   var inputId = 'new-'+type+'-name';
   var name = (document.getElementById(inputId).value||'').trim();
   if(!name){ toast('Type a name first'); return; }
-  var list = type==='hosp'?HOSPITALS:type==='doc'?DOCTORS:INSURERS;
+  var list = type==='hosp'?HOSPITALS:type==='doc'?DOCTORS:type==='ins'?INSURERS:SPECIALITIES;
   if(list.some(function(v){return v.toLowerCase()===name.toLowerCase();})){ toast('Already in the list'); return; }
   list.push(name);
   saveLists();
@@ -2549,7 +2601,8 @@ function removeListItem(type, name){
   if(!confirm('Remove "'+name+'"? Existing entries keep this name — you just won\'t see it as an option for new ones.')) return;
   if(type==='hosp') HOSPITALS = HOSPITALS.filter(function(v){return v!==name;});
   else if(type==='doc') DOCTORS = DOCTORS.filter(function(v){return v!==name;});
-  else INSURERS = INSURERS.filter(function(v){return v!==name;});
+  else if(type==='ins') INSURERS = INSURERS.filter(function(v){return v!==name;});
+  else SPECIALITIES = SPECIALITIES.filter(function(v){return v!==name;});
   saveLists();
   renderListManager();
 }
@@ -2867,6 +2920,8 @@ buildCatSelect();
 onCatChange();
 buildHospSelect();
 buildDocSelect();
+buildSpecSelect();
+buildOrderedSelect();
 refreshDatalists();
 buildChips();
 updateHeader();
@@ -2874,6 +2929,61 @@ nav('summary');
 // Connect to Firebase for live shared sync (everyone sees the same data)
 fbInit();
 }
+// ═══════════════════════════════════════════════════════════════════════════
+// SPECIALITIES (managed list, mirrors Hospitals/Doctors/Insurers)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function buildSubSelect(){
+  var cat = document.getElementById('f-cat').value;
+  var def = getCatDef(cat);
+  var subs = def.subs.concat(customSubs[cat]||[]);
+  var sel = document.getElementById('f-sub');
+  var cur = sel.value;
+  sel.innerHTML = subs.map(function(s){ return '<option value="'+s+'">'+s+'</option>'; }).join('') + '<option value="__new__">+ Add new subtype…</option>';
+  if(cur && subs.indexOf(cur)>=0) sel.value = cur;
+}
+function buildSpecSelect(){
+  var sel = document.getElementById('f-spec');
+  var cur = sel.value;
+  sel.innerHTML = '<option value="">— select —</option>' + SPECIALITIES.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('') + '<option value="__new__">+ Add new speciality…</option>';
+  if(cur && SPECIALITIES.indexOf(cur)>=0) sel.value = cur;
+}
+function buildOrderedSelect(){
+  var sel = document.getElementById('f-ordered');
+  var cur = sel.value;
+  sel.innerHTML = '<option value="Self">Self</option>' + DOCTORS.map(function(d){return '<option value="'+d+'">'+d+'</option>';}).join('') + '<option value="__new__">+ Add new doctor…</option>';
+  if(cur && (cur==='Self' || DOCTORS.indexOf(cur)>=0)) sel.value = cur;
+}
+document.addEventListener('change', function(e){
+  if(!e.target) return;
+  if(e.target.id==='f-sub' && e.target.value==='__new__'){
+    var cat = document.getElementById('f-cat').value;
+    var sname = prompt('New subtype name for '+cat+':');
+    if(sname && sname.trim()){
+      rememberSub(cat, sname.trim());
+      buildSubSelect();
+      document.getElementById('f-sub').value = sname.trim();
+    } else { e.target.value=''; buildSubSelect(); }
+  }
+  if(e.target.id==='f-spec' && e.target.value==='__new__'){
+    var spname = prompt('New speciality name:');
+    if(spname && spname.trim()){
+      spname = spname.trim();
+      if(SPECIALITIES.indexOf(spname)<0){ SPECIALITIES.push(spname); saveLists(); }
+      buildSpecSelect();
+      document.getElementById('f-spec').value = spname;
+    } else { e.target.value=''; }
+  }
+  if(e.target.id==='f-ordered' && e.target.value==='__new__'){
+    var oname = prompt('New doctor name:');
+    if(oname && oname.trim()){
+      oname = oname.trim();
+      if(DOCTORS.indexOf(oname)<0){ DOCTORS.push(oname); saveLists(); }
+      buildOrderedSelect();
+      document.getElementById('f-ordered').value = oname;
+    } else { e.target.value=''; }
+  }
+});
 </script>
 </body>
 </html>
