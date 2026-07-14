@@ -2845,9 +2845,9 @@ function parseBloodSheet(ws){
   return out;
 }
 function fmtExcelDate(d){
-  var y=d.getUTCFullYear ? d.getUTCFullYear() : d.getFullYear();
-  var m=(d.getUTCMonth ? d.getUTCMonth() : d.getMonth())+1;
-  var da=d.getUTCDate ? d.getUTCDate() : d.getDate();
+  var t = d.getTime() + 43200000; // nudge 12 hours forward to absorb rounding noise
+  var d2 = new Date(t);
+  var y=d2.getUTCFullYear(), m=d2.getUTCMonth()+1, da=d2.getUTCDate();
   return y+'-'+String(m).padStart(2,'0')+'-'+String(da).padStart(2,'0');
 }
 if(checkForSharedData()){
