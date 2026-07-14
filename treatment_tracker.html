@@ -242,10 +242,11 @@ body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;font-size:15px;backg
     <div class="card-ttl" style="margin-bottom:0">Insurance recovery</div>
     <button class="btn-sm" onclick="openClaimModal()">➕ New claim</button>
   </div>
-  <div class="metrics" style="margin-bottom:10px">
-    <div class="metric"><div class="lbl">Recovered</div><div class="val" id="ins-recovered">₹0</div></div>
-    <div class="metric"><div class="lbl">Net out-of-pocket</div><div class="val" id="ins-net">₹0</div></div>
-  </div>
+  <div class="metrics" style="margin-bottom:10px;grid-template-columns:1fr 1fr 1fr">
+      <div class="metric"><div class="lbl">Billed</div><div class="val" id="ins-billed">₹0</div></div>
+      <div class="metric"><div class="lbl">Recovered</div><div class="val" id="ins-recovered">₹0</div></div>
+      <div class="metric"><div class="lbl">Net out-of-pocket</div><div class="val" id="ins-net">₹0</div></div>
+    </div>
   <div id="ins-by-insurer" style="margin-bottom:10px"></div>
   <div id="ins-claim-list"></div>
 </div>
