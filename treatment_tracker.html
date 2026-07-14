@@ -3147,7 +3147,7 @@ var editingEmiId = null;
 function renderLoanLenderSelect(){
   var sel = document.getElementById('loan-lender');
   if(!sel) return;
-  sel.innerHTML = LENDERS.map(function(l){return '<option value="'+l+'">'+l+'</option>';}).join('') || '<option value="">Add a lender in Settings first</option>';
+  sel.innerHTML = (LENDERS||[]).map(function(l){return '<option value="'+l+'">'+l+'</option>';}).join('') || '<option value="">Add a lender in Settings first</option>';
 }
 function openLoanModal(id){
   renderLoanLenderSelect();
@@ -3237,7 +3237,7 @@ function deleteLoan(){
 function renderEmiLoanSelect(){
   var sel = document.getElementById('emi-loan');
   if(!sel) return;
-  sel.innerHTML = loans.map(function(l){ return '<option value="'+l.id+'">'+l.lender+' — '+fmtDate(l.date)+' (₹'+Math.round(loanBorrowedAmount(l))+')</option>'; }).join('') || '<option value="">Add a loan first</option>';
+  sel.innerHTML = (loans||[]).map(function(l){ return '<option value="'+l.id+'">'+l.lender+' — '+fmtDate(l.date)+' (₹'+Math.round(loanBorrowedAmount(l))+')</option>'; }).join('') || '<option value="">Add a loan first</option>';
 }
 function openEmiModal(id){
   renderEmiLoanSelect();
@@ -3290,7 +3290,7 @@ function deleteEmi(){
 }
 function loansTotals(){
   var byLender = {}, totalBorrowed = 0, totalPaid = 0;
-  loans.forEach(function(l){
+  (loans||[]).forEach(function(l){
     var borrowed = loanBorrowedAmount(l);
     var paid = emiPayments.filter(function(p){return p.loanId===l.id;}).reduce(function(s,p){return s+(p.amount||0);},0);
     if(!byLender[l.lender]) byLender[l.lender] = {borrowed:0, paid:0};
@@ -3309,7 +3309,7 @@ function renderLoans(){
   document.getElementById('loan-by-lender').innerHTML = lkeys.length
     ? lkeys.map(function(k){ var v=t.byLender[k]; return '<div class="sum-row"><div class="sum-l"><strong>'+k+'</strong><span style="color:#999;font-size:12px">borrowed '+fmtMoney(v.borrowed)+'</span></div><strong>'+fmtMoney(v.borrowed-v.paid)+' owed</strong></div>'; }).join('')
     : '';
-  var sortedLoans = loans.slice().sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
+  var sortedLoans = (loans||[]).slice().sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
   var loanHtml = sortedLoans.length
     ? sortedLoans.map(function(l){
         var borrowed = loanBorrowedAmount(l);
@@ -3321,7 +3321,7 @@ function renderLoans(){
           +'</div>';
       }).join('')
     : '<div class="empty">No medical loans yet.</div>';
-  var sortedEmis = emiPayments.slice().sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
+  var sortedEmis = (emiPayments||[]).slice().sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
   var emiHtml = sortedEmis.length
     ? '<div style="font-size:11px;font-weight:700;color:#bbb;margin:12px 0 6px">EMI PAYMENTS</div>' + sortedEmis.map(function(p){
         var l = loans.find(function(x){return x.id===p.loanId;});
