@@ -251,6 +251,21 @@ body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;font-size:15px;backg
 </div>
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div class="card-ttl" style="margin-bottom:0">Medical Loans</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn-sm" onclick="openLoanModal()">➕ New loan</button>
+        <button class="btn-sm" onclick="openEmiModal()">💳 Log EMI</button>
+      </div>
+    </div>
+    <div class="metrics" style="margin-bottom:10px">
+      <div class="metric"><div class="lbl">Borrowed</div><div class="val" id="loan-borrowed">₹0</div></div>
+      <div class="metric"><div class="lbl">Outstanding</div><div class="val" id="loan-outstanding">₹0</div></div>
+    </div>
+    <div id="loan-by-lender" style="margin-bottom:10px"></div>
+    <div id="loan-list"></div>
+  </div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
       <div class="card-ttl" style="margin-bottom:0">All expenses</div>
       <button class="btn-sm" onclick="exportCSV()">⬇ Export CSV</button>
     </div>
@@ -484,6 +499,13 @@ Tip: start lines with - for a checklist"></textarea></div>
     </div>
     <div id="spec-list" style="margin-bottom:14px"></div>
 
+    <div style="font-size:12px;font-weight:700;color:#5a7a5a;text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px">Lenders</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <div class="fg" style="flex:1;margin-bottom:0"><input type="text" id="new-lender-name" placeholder="e.g. Bajaj Finserv, Bank name…"></div>
+      <button onclick="addListItem('lender')" style="padding:10px 16px;background:#1a6b4a;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;flex-shrink:0;font-family:inherit">+ Add</button>
+    </div>
+    <div id="lender-list" style="margin-bottom:14px"></div>
+
     <button onclick="closeListManager()" class="btn-out" style="margin-top:6px">Done</button>
   </div>
 </div>
@@ -525,7 +547,48 @@ Tip: start lines with - for a checklist"></textarea></div>
     <button onclick="closeCleanupTool()" class="btn-out" style="margin-top:14px">Done</button>
   </div>
 </div>
-<div class="toast" id="toast"></div>
+<<div class="overlay" id="loan-modal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div class="modal-ttl" id="loan-m-title">New Medical Loan</div>
+      <button onclick="closeLoanModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#aaa">✕</button>
+    </div>
+    <div class="row2">
+      <div class="fg"><label>Lender</label><select id="loan-lender"></select></div>
+      <div class="fg"><label>Date taken</label><input type="date" id="loan-date"></div>
+    </div>
+    <div class="fg"><label>Note <span style="font-weight:400;color:#bbb">(optional)</span></label>
+      <input type="text" id="loan-note" placeholder="e.g. Immunotherapy Cycle 2"></div>
+    <div class="slabel">Which expenses did this loan pay for?</div>
+    <div id="loan-entry-picker" style="max-height:34vh;overflow-y:auto;border:1px solid #eee;border-radius:8px;padding:4px 10px;margin-bottom:10px"></div>
+    <div class="fg"><label>Amount borrowed (auto-summed from ticked expenses)</label>
+      <input type="text" id="loan-amount" readonly style="background:#f0f0f0;font-weight:700"></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button onclick="saveLoan()" class="btn-add" style="flex:1">Save Loan</button>
+      <button id="loan-del" onclick="deleteLoan()" style="display:none;padding:12px 16px;background:#fdf0ef;color:#c0392b;border:1px solid #f5c0bb;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="emi-modal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div class="modal-ttl" id="emi-m-title">Log EMI Payment</div>
+      <button onclick="closeEmiModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#aaa">✕</button>
+    </div>
+    <div class="fg"><label>Loan</label><select id="emi-loan"></select></div>
+    <div class="row2">
+      <div class="fg"><label>Date paid</label><input type="date" id="emi-date"></div>
+      <div class="fg"><label>Amount (₹)</label><input type="number" id="emi-amount" placeholder="0" min="0" inputmode="numeric"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button onclick="saveEmi()" class="btn-add" style="flex:1">Save EMI</button>
+      <button id="emi-del" onclick="deleteEmi()" style="display:none;padding:12px 16px;background:#fdf0ef;color:#c0392b;border:1px solid #f5c0bb;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>>
 
 <!-- NAV — last in DOM so always on top -->
 <div id="botnav">
@@ -1205,6 +1268,7 @@ function renderExpenses(){
     ? withCost.map(function(e){return '<div class="exp-row"><div><div style="font-size:14px;font-weight:600">'+( e.name||e.sub||e.cat)+'</div><div style="font-size:12px;color:#999;margin-top:2px">'+fmtDate(e.date)+(e.paid?' · 👤 '+e.paid:'')+' · '+tagHTML(e.cat,true,e.sub)+'</div></div><div style="font-size:16px;font-weight:700;flex-shrink:0;margin-left:10px">'+fmtMoney(e.cost)+'</div></div>';}).join('')
     : '<div class="empty">No expenses yet.</div>';
   renderInsurance();
+  renderLoans();
 }
 
 function renderTypeBreakdownHTML(){
@@ -1307,7 +1371,8 @@ function exportBackup(){
     entries:entries, customSubs:customSubs, notes:notes, sectionOrder:sectionOrder,
     bloodReports:bloodReports, customParams:customParams, customLabs:customLabs, keyOverrides:keyOverrides,
     hospitals:HOSPITALS, doctors:DOCTORS, insurers:INSURERS, specialities:SPECIALITIES, claims:claims,
-    at:new Date().toISOString(), v:8
+    lenders:LENDERS, loans:loans, emiPayments:emiPayments,
+    at:new Date().toISOString(), v:9
   };
   dl(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),'maa_backup_'+new Date().toISOString().slice(0,10)+'.json');
   toast('✓ Backup downloaded (incl. blood)');
@@ -1336,6 +1401,9 @@ function restoreBackup(ev){
       if(d.insurers) INSURERS=d.insurers;
       if(d.specialities) SPECIALITIES=d.specialities;
       if(d.claims) claims=d.claims;
+      if(d.lenders) LENDERS=d.lenders;
+      if(d.loans) loans=d.loans;
+      if(d.emiPayments) emiPayments=d.emiPayments;
       reconcileLists();
       saveBlood(); saveLists();
       saveData(); buildChips(); updateHeader(); renderSettings(); refreshDatalists(); buildHospSelect(); buildDocSelect(); buildSpecSelect(); buildOrderedSelect();
@@ -1469,6 +1537,9 @@ function collectAllData(){
     insurers: INSURERS,
     specialities: SPECIALITIES,
     claims: claims,
+    lenders: LENDERS,
+    loans: loans,
+    emiPayments: emiPayments,
     savedAt: Date.now()
   };
 }
@@ -1489,6 +1560,9 @@ function applyAllData(d){
   if(d.insurers) INSURERS = d.insurers;
   if(d.specialities) SPECIALITIES = d.specialities;
   if(d.claims) claims = d.claims;
+  if(d.lenders) LENDERS = d.lenders;
+  if(d.loans) loans = d.loans;
+  if(d.emiPayments) emiPayments = d.emiPayments;
   reconcileLists();
   saveData(); saveNotes(); saveBlood(); saveLists();
   window._applyingSync = false;
@@ -1524,6 +1598,9 @@ function mergeData(local, remote){
     doctors: mergeStrList(local.doctors, remote.doctors),
     insurers: mergeStrList(local.insurers, remote.insurers),
     specialities: mergeStrList(local.specialities, remote.specialities),
+    lenders: mergeStrList(local.lenders, remote.lenders),
+    loans: mergeById(local.loans, remote.loans),
+    emiPayments: mergeById(local.emiPayments, remote.emiPayments),
     // For settings-like data, prefer whichever was saved most recently
     customSubs: (remote.savedAt>local.savedAt? remote.customSubs : local.customSubs) || local.customSubs || remote.customSubs,
     customParams: (remote.savedAt>local.savedAt? remote.customParams : local.customParams) || local.customParams || remote.customParams,
@@ -2570,6 +2647,9 @@ function loadLists(){
   try{ var i=localStorage.getItem('maa_insurers'); if(i) INSURERS=JSON.parse(i); }catch(e){}
   try{ var c=localStorage.getItem('maa_claims'); if(c) claims=JSON.parse(c); }catch(e){}
   try{ var sp=localStorage.getItem('maa_specialities'); if(sp) SPECIALITIES=JSON.parse(sp); }catch(e){}
+  try{ var ld=localStorage.getItem('maa_lenders'); if(ld) LENDERS=JSON.parse(ld); }catch(e){}
+  try{ var ln=localStorage.getItem('maa_loans'); if(ln) loans=JSON.parse(ln); }catch(e){}
+  try{ var em=localStorage.getItem('maa_emi'); if(em) emiPayments=JSON.parse(em); }catch(e){}
   reconcileLists();
 }
 function saveLists(){
@@ -2578,6 +2658,9 @@ function saveLists(){
   try{ localStorage.setItem('maa_insurers',JSON.stringify(INSURERS)); }catch(e){}
   try{ localStorage.setItem('maa_claims',JSON.stringify(claims)); }catch(e){}
   try{ localStorage.setItem('maa_specialities',JSON.stringify(SPECIALITIES)); }catch(e){}
+  try{ localStorage.setItem('maa_lenders',JSON.stringify(LENDERS)); }catch(e){}
+  try{ localStorage.setItem('maa_loans',JSON.stringify(loans)); }catch(e){}
+  try{ localStorage.setItem('maa_emi',JSON.stringify(emiPayments)); }catch(e){}
   if(typeof fbAutoPush==='function') fbAutoPush();
 }
 // Make sure every hospital/doctor already used in your entries is always in the
@@ -2628,7 +2711,7 @@ document.addEventListener('change', function(e){
 function openListManager(){ renderListManager(); document.getElementById('list-modal').className = 'overlay on'; }
 function closeListManager(){
   document.getElementById('list-modal').className = 'overlay';
-  buildHospSelect(); buildDocSelect(); buildSpecSelect(); buildOrderedSelect(); renderClaimInsurerSelect();
+  buildHospSelect(); buildDocSelect(); buildSpecSelect(); buildOrderedSelect(); renderClaimInsurerSelect(); renderLoanLenderSelect(); renderEmiLoanSelect();
 }
 function renderListManager(){
   function rowsFor(list, type){
@@ -2644,12 +2727,13 @@ function renderListManager(){
   document.getElementById('doc-list').innerHTML = rowsFor(DOCTORS,'doc');
   document.getElementById('ins-list').innerHTML = rowsFor(INSURERS,'ins');
   document.getElementById('spec-list').innerHTML = rowsFor(SPECIALITIES,'spec');
+  document.getElementById('lender-list').innerHTML = rowsFor(LENDERS,'lender');
 }
 function addListItem(type){
   var inputId = 'new-'+type+'-name';
   var name = (document.getElementById(inputId).value||'').trim();
   if(!name){ toast('Type a name first'); return; }
-  var list = type==='hosp'?HOSPITALS:type==='doc'?DOCTORS:type==='ins'?INSURERS:SPECIALITIES;
+  var list = type==='hosp'?HOSPITALS:type==='doc'?DOCTORS:type==='ins'?INSURERS:type==='spec'?SPECIALITIES:LENDERS;
   if(list.some(function(v){return v.toLowerCase()===name.toLowerCase();})){ toast('Already in the list'); return; }
   list.push(name);
   saveLists();
@@ -2662,7 +2746,8 @@ function removeListItem(type, name){
   if(type==='hosp') HOSPITALS = HOSPITALS.filter(function(v){return v!==name;});
   else if(type==='doc') DOCTORS = DOCTORS.filter(function(v){return v!==name;});
   else if(type==='ins') INSURERS = INSURERS.filter(function(v){return v!==name;});
-  else SPECIALITIES = SPECIALITIES.filter(function(v){return v!==name;});
+  else if(type==='spec') SPECIALITIES = SPECIALITIES.filter(function(v){return v!==name;});
+  else LENDERS = LENDERS.filter(function(v){return v!==name;});
   saveLists();
   renderListManager();
 }
@@ -2982,6 +3067,8 @@ buildHospSelect();
 buildDocSelect();
 buildSpecSelect();
 buildOrderedSelect();
+renderLoanLenderSelect();
+renderEmiLoanSelect();
 refreshDatalists();
 buildChips();
 updateHeader();
@@ -3044,6 +3131,204 @@ document.addEventListener('change', function(e){
     } else { e.target.value=''; }
   }
 });
+// ═══════════════════════════════════════════════════════════════════════════
+// MEDICAL LOANS
+// ═══════════════════════════════════════════════════════════════════════════
+var LENDERS = [];
+var loans = [];       // [{id, lender, date, note, entryIds:[]}]
+var emiPayments = []; // [{id, loanId, date, amount}]
+var editingLoanId = null, loanPickedIds = [];
+var editingEmiId = null;
+
+function renderLoanLenderSelect(){
+  var sel = document.getElementById('loan-lender');
+  if(!sel) return;
+  sel.innerHTML = LENDERS.map(function(l){return '<option value="'+l+'">'+l+'</option>';}).join('') || '<option value="">Add a lender in Settings first</option>';
+}
+function openLoanModal(id){
+  renderLoanLenderSelect();
+  if(id){
+    var c=null; for(var i=0;i<loans.length;i++){ if(loans[i].id===id){c=loans[i];break;} }
+    if(!c) return;
+    editingLoanId = id;
+    loanPickedIds = (c.entryIds||[]).slice();
+    document.getElementById('loan-m-title').textContent = 'Edit Medical Loan';
+    document.getElementById('loan-lender').value = c.lender||'';
+    document.getElementById('loan-date').value = c.date||'';
+    document.getElementById('loan-note').value = c.note||'';
+    document.getElementById('loan-del').style.display='block';
+  } else {
+    editingLoanId = null;
+    loanPickedIds = [];
+    document.getElementById('loan-m-title').textContent = 'New Medical Loan';
+    document.getElementById('loan-date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('loan-note').value = '';
+    document.getElementById('loan-del').style.display='none';
+  }
+  renderLoanEntryPicker();
+  document.getElementById('loan-modal').className = 'overlay on';
+}
+function closeLoanModal(){ document.getElementById('loan-modal').className='overlay'; editingLoanId=null; loanPickedIds=[]; }
+function renderLoanEntryPicker(){
+  var withCost = entries.filter(function(e){return e.cost>0;}).slice().sort(function(a,b){return b.date.localeCompare(a.date);});
+  var box = document.getElementById('loan-entry-picker');
+  if(!withCost.length){ box.innerHTML = '<div class="empty">No expenses to link yet.</div>'; return; }
+  box.innerHTML = withCost.map(function(e){
+    var checked = loanPickedIds.indexOf(e.id)>=0 ? 'checked' : '';
+    return '<label style="display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid #f5f4f1;font-size:13px;cursor:pointer">'
+      +'<input type="checkbox" '+checked+' onchange="toggleLoanEntry('+e.id+',this.checked)" style="width:auto;flex-shrink:0">'
+      +'<span style="flex:1">'+fmtDate(e.date)+' — '+(e.name||e.sub||e.cat)+'</span>'
+      +'<strong>'+fmtMoney(e.cost)+'</strong>'
+      +'</label>';
+  }).join('');
+  updateLoanBill();
+}
+function toggleLoanEntry(id, checked){
+  if(checked){ if(loanPickedIds.indexOf(id)<0) loanPickedIds.push(id); }
+  else { loanPickedIds = loanPickedIds.filter(function(x){return x!==id;}); }
+  updateLoanBill();
+}
+function updateLoanBill(){
+  var bill = loanPickedIds.reduce(function(s,id){
+    var e = entries.find(function(x){return x.id===id;});
+    return s + (e ? (e.cost||0) : 0);
+  }, 0);
+  document.getElementById('loan-amount').value = fmtMoney(bill);
+}
+function loanBorrowedAmount(l){
+  return (l.entryIds||[]).reduce(function(s,id){
+    var e = entries.find(function(x){return x.id===id;});
+    return s + (e ? (e.cost||0) : 0);
+  }, 0);
+}
+function saveLoan(){
+  var lender = document.getElementById('loan-lender').value;
+  var date = document.getElementById('loan-date').value;
+  var note = document.getElementById('loan-note').value.trim();
+  if(!lender){ toast('Pick a lender (add one in Settings if needed)'); return; }
+  if(!loanPickedIds.length){ toast('Tick at least one expense'); return; }
+  if(editingLoanId){
+    for(var i=0;i<loans.length;i++){
+      if(loans[i].id===editingLoanId){ loans[i].lender=lender; loans[i].date=date; loans[i].note=note; loans[i].entryIds=loanPickedIds.slice(); break; }
+    }
+    toast('✓ Loan updated');
+  } else {
+    loans.push({id:Date.now(), lender:lender, date:date, note:note, entryIds:loanPickedIds.slice()});
+    toast('✓ Loan added');
+  }
+  saveLists();
+  closeLoanModal();
+  renderExpenses();
+}
+function deleteLoan(){
+  if(!editingLoanId) return;
+  if(!confirm('Delete this loan? Its EMI payment history will also be removed.')) return;
+  loans = loans.filter(function(l){return l.id!==editingLoanId;});
+  emiPayments = emiPayments.filter(function(p){return p.loanId!==editingLoanId;});
+  saveLists();
+  closeLoanModal();
+  renderExpenses();
+  toast('Deleted');
+}
+function renderEmiLoanSelect(){
+  var sel = document.getElementById('emi-loan');
+  if(!sel) return;
+  sel.innerHTML = loans.map(function(l){ return '<option value="'+l.id+'">'+l.lender+' — '+fmtDate(l.date)+' (₹'+Math.round(loanBorrowedAmount(l))+')</option>'; }).join('') || '<option value="">Add a loan first</option>';
+}
+function openEmiModal(id){
+  renderEmiLoanSelect();
+  if(id){
+    var p=null; for(var i=0;i<emiPayments.length;i++){ if(emiPayments[i].id===id){p=emiPayments[i];break;} }
+    if(!p) return;
+    editingEmiId = id;
+    document.getElementById('emi-m-title').textContent = 'Edit EMI Payment';
+    document.getElementById('emi-loan').value = p.loanId;
+    document.getElementById('emi-date').value = p.date||'';
+    document.getElementById('emi-amount').value = p.amount||'';
+    document.getElementById('emi-del').style.display='block';
+  } else {
+    editingEmiId = null;
+    document.getElementById('emi-m-title').textContent = 'Log EMI Payment';
+    document.getElementById('emi-date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('emi-amount').value = '';
+    document.getElementById('emi-del').style.display='none';
+  }
+  document.getElementById('emi-modal').className = 'overlay on';
+}
+function closeEmiModal(){ document.getElementById('emi-modal').className='overlay'; editingEmiId=null; }
+function saveEmi(){
+  var loanId = parseInt(document.getElementById('emi-loan').value,10);
+  var date = document.getElementById('emi-date').value;
+  var amount = parseFloat(document.getElementById('emi-amount').value)||0;
+  if(!loanId){ toast('Pick a loan (add one first if needed)'); return; }
+  if(amount<=0){ toast('Enter an amount'); return; }
+  if(editingEmiId){
+    for(var i=0;i<emiPayments.length;i++){
+      if(emiPayments[i].id===editingEmiId){ emiPayments[i].loanId=loanId; emiPayments[i].date=date; emiPayments[i].amount=amount; break; }
+    }
+    toast('✓ EMI updated');
+  } else {
+    emiPayments.push({id:Date.now(), loanId:loanId, date:date, amount:amount});
+    toast('✓ EMI logged');
+  }
+  saveLists();
+  closeEmiModal();
+  renderExpenses();
+}
+function deleteEmi(){
+  if(!editingEmiId) return;
+  if(!confirm('Delete this EMI payment record?')) return;
+  emiPayments = emiPayments.filter(function(p){return p.id!==editingEmiId;});
+  saveLists();
+  closeEmiModal();
+  renderExpenses();
+  toast('Deleted');
+}
+function loansTotals(){
+  var byLender = {}, totalBorrowed = 0, totalPaid = 0;
+  loans.forEach(function(l){
+    var borrowed = loanBorrowedAmount(l);
+    var paid = emiPayments.filter(function(p){return p.loanId===l.id;}).reduce(function(s,p){return s+(p.amount||0);},0);
+    if(!byLender[l.lender]) byLender[l.lender] = {borrowed:0, paid:0};
+    byLender[l.lender].borrowed += borrowed;
+    byLender[l.lender].paid += paid;
+    totalBorrowed += borrowed;
+    totalPaid += paid;
+  });
+  return {byLender:byLender, totalBorrowed:totalBorrowed, totalPaid:totalPaid};
+}
+function renderLoans(){
+  var t = loansTotals();
+  document.getElementById('loan-borrowed').textContent = fmtMoney(t.totalBorrowed);
+  document.getElementById('loan-outstanding').textContent = fmtMoney(t.totalBorrowed - t.totalPaid);
+  var lkeys = Object.keys(t.byLender);
+  document.getElementById('loan-by-lender').innerHTML = lkeys.length
+    ? lkeys.map(function(k){ var v=t.byLender[k]; return '<div class="sum-row"><div class="sum-l"><strong>'+k+'</strong><span style="color:#999;font-size:12px">borrowed '+fmtMoney(v.borrowed)+'</span></div><strong>'+fmtMoney(v.borrowed-v.paid)+' owed</strong></div>'; }).join('')
+    : '';
+  var sortedLoans = loans.slice().sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
+  var loanHtml = sortedLoans.length
+    ? sortedLoans.map(function(l){
+        var borrowed = loanBorrowedAmount(l);
+        var paid = emiPayments.filter(function(p){return p.loanId===l.id;}).reduce(function(s,p){return s+(p.amount||0);},0);
+        return '<div class="record-item" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0efeb">'
+          +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+l.lender+' — '+fmtDate(l.date)+'</div>'
+          +'<div style="font-size:12px;color:#999;margin-top:2px">Borrowed '+fmtMoney(borrowed)+' · Paid '+fmtMoney(paid)+' · Owed '+fmtMoney(borrowed-paid)+(l.note?' · '+l.note:'')+'</div></div>'
+          +'<button class="btn-sm" onclick="openLoanModal('+l.id+')">✎</button>'
+          +'</div>';
+      }).join('')
+    : '<div class="empty">No medical loans yet.</div>';
+  var sortedEmis = emiPayments.slice().sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
+  var emiHtml = sortedEmis.length
+    ? '<div style="font-size:11px;font-weight:700;color:#bbb;margin:12px 0 6px">EMI PAYMENTS</div>' + sortedEmis.map(function(p){
+        var l = loans.find(function(x){return x.id===p.loanId;});
+        return '<div class="record-item" style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0efeb">'
+          +'<div style="font-size:13px">'+fmtDate(p.date)+' — '+(l?l.lender:'?')+'</div>'
+          +'<div style="display:flex;align-items:center;gap:8px"><strong>'+fmtMoney(p.amount)+'</strong><button class="btn-sm" onclick="openEmiModal('+p.id+')">✎</button></div>'
+          +'</div>';
+      }).join('')
+    : '';
+  document.getElementById('loan-list').innerHTML = loanHtml + emiHtml;
+}
 </script>
 </body>
 </html>
