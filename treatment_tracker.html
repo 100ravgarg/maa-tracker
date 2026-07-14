@@ -2898,9 +2898,12 @@ function renderInsuranceSummaryHTML(){
   var totalSpent = entries.reduce(function(s,e){return s+(e.cost||0);},0);
   if(!claims.length) return '<div class="empty">No insurance claims yet.</div>';
   var ikeys = Object.keys(t.byInsurer);
-  var html = '<div class="sum-row" style="font-weight:700"><div class="sum-l">Total recovered</div><span style="color:#1a6b4a">'+fmtMoney(t.totalReceived)+'</span></div>'
+  var totalBilled = ikeys.reduce(function(s,k){return s+t.byInsurer[k].bill;},0);
+  var html = '<div class="sum-row" style="font-weight:700"><div class="sum-l">Total claimed (billed)</div><span>'+fmtMoney(totalBilled)+'</span></div>'
+    + '<div class="sum-row" style="font-weight:700"><div class="sum-l">Total recovered</div><span style="color:#1a6b4a">'+fmtMoney(t.totalReceived)+'</span></div>'
+    + '<div class="sum-row" style="font-weight:700"><div class="sum-l">Unrecovered / pending</div><span style="color:#c0392b">'+fmtMoney(totalBilled - t.totalReceived)+'</span></div>'
     + '<div class="sum-row" style="font-weight:700"><div class="sum-l">Net out-of-pocket</div><span>'+fmtMoney(totalSpent - t.totalReceived)+'</span></div>';
-  html += ikeys.map(function(k){ var v=t.byInsurer[k]; return '<div class="sum-row" style="padding-left:14px;font-size:12px;color:#666"><div class="sum-l">– '+k+'</div><span>'+fmtMoney(v.received)+' of '+fmtMoney(v.bill)+'</span></div>'; }).join('');
+  html += ikeys.map(function(k){ var v=t.byInsurer[k]; return '<div class="sum-row" style="padding-left:14px;font-size:12px;color:#666"><div class="sum-l">– '+k+'</div><span>Billed '+fmtMoney(v.bill)+' · Recovered '+fmtMoney(v.received)+' · Pending '+fmtMoney(v.bill-v.received)+'</span></div>'; }).join('');
   return html;
 }
 
