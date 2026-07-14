@@ -2642,7 +2642,10 @@ var HOSPITALS = ['Athenaa','Healthians','Ganga Ram Hospital','Mahajan Lab','Medi
 var DOCTORS = ['Dr. Bhuvan','Dr. Aditi','Dr. Amit Dhamija','Dr. Anshul Mittal','Dr. Chandrashekhar','Dr. Jyoti','Dr. Yogesh','Dr. Saurabh','Dr. Darshit Jain','Dr. Madhwi Chawla','Dr. Sonia','Dr. Madhu','Dr. Amit Bhargava','Dr. Vineet Govinda Gupta','Dr. Shyam Aggarwal','Dr. Anshul','Dr. Kalra'];
 var INSURERS = ['MASIN','KROLL'];
 var claims = [];
-var SPECIALITIES = ['Oncologist','Radiologist','Pulmonologist','Cardiologist','Oncologist Surgeon'];
+vvar SPECIALITIES = ['Oncologist','Radiologist','Pulmonologist','Cardiologist','Oncologist Surgeon'];
+var LENDERS = [];
+var loans = [];
+var emiPayments = [];
 
 function loadLists(){
   try{ var h=localStorage.getItem('maa_hospitals'); if(h) HOSPITALS=JSON.parse(h); }catch(e){}
@@ -3137,9 +3140,7 @@ document.addEventListener('change', function(e){
 // ═══════════════════════════════════════════════════════════════════════════
 // MEDICAL LOANS
 // ═══════════════════════════════════════════════════════════════════════════
-var LENDERS = [];
-var loans = [];       // [{id, lender, date, note, entryIds:[]}]
-var emiPayments = []; // [{id, loanId, date, amount}]
+
 var editingLoanId = null, loanPickedIds = [];
 var editingEmiId = null;
 
