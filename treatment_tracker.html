@@ -1165,17 +1165,20 @@ function renderTimelineByCycle(data){
     html += '<div style="display:flex;justify-content:space-between;align-items:baseline;margin:18px 2px 8px;padding-bottom:5px;border-bottom:2px solid #e4e2db">'
       +'<span style="font-size:15px;font-weight:800;color:#1a6b4a">Cycle '+cn+'</span>'
       +'<span style="font-size:11px;color:#999">'+ents.length+' events · '+fmtMoney(total)+'</span></div>';
-    var partsMap = {}; var noPart = [];
-    ents.forEach(function(e){ if(e.part){ if(!partsMap[e.part]) partsMap[e.part]=[]; partsMap[e.part].push(e); } else noPart.push(e); });
+    var partsMap = {}; var noPartMap = {};
+    ents.forEach(function(e){
+      if(e.part){ if(!partsMap[e.part]) partsMap[e.part]=[]; partsMap[e.part].push(e); }
+      else { var subKey = e.sub||e.cat; if(!noPartMap[subKey]) noPartMap[subKey]=[]; noPartMap[subKey].push(e); }
+    });
     var partNums = Object.keys(partsMap).map(Number).sort(function(a,b){return a-b;});
     partNums.forEach(function(pn){
       html += '<div style="font-size:13px;font-weight:700;color:#555;margin:12px 2px 6px">Part '+pn+'</div>';
       partsMap[pn].slice().sort(function(a,b){return b.date.localeCompare(a.date);}).forEach(function(e){ html += entryCardHTML(e); });
     });
-    if(noPart.length){
-      if(partNums.length) html += '<div style="font-size:13px;font-weight:700;color:#555;margin:12px 2px 6px">Not part-specific</div>';
-      noPart.slice().sort(function(a,b){return b.date.localeCompare(a.date);}).forEach(function(e){ html += entryCardHTML(e); });
-    }
+    Object.keys(noPartMap).forEach(function(subKey){
+      html += '<div style="font-size:13px;font-weight:700;color:#555;margin:12px 2px 6px">'+subKey+'</div>';
+      noPartMap[subKey].slice().sort(function(a,b){return b.date.localeCompare(a.date);}).forEach(function(e){ html += entryCardHTML(e); });
+    });
   });
   if(withoutCycle.length){
     html += '<div style="display:flex;justify-content:space-between;align-items:baseline;margin:22px 2px 8px;padding-bottom:5px;border-bottom:2px solid #e4e2db">'
