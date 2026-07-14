@@ -243,7 +243,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;font-size:15px;backg
     <button class="btn-sm" onclick="openClaimModal()">➕ New claim</button>
   </div>
   <div class="metrics" style="margin-bottom:10px;grid-template-columns:1fr 1fr 1fr">
-      <div class="metric"><div class="lbl">Billed</div><div class="val" id="ins-billed">₹0</div></div>
+      <div class="metric"><div class="lbl">Total Expense</div><div class="val" id="ins-billed">₹0</div></div>
       <div class="metric"><div class="lbl">Recovered</div><div class="val" id="ins-recovered">₹0</div></div>
       <div class="metric"><div class="lbl">Net out-of-pocket</div><div class="val" id="ins-net">₹0</div></div>
     </div>
@@ -2876,21 +2876,19 @@ function claimsTotals(){
 function renderInsurance(){
   var t = claimsTotals();
   var totalSpent = entries.reduce(function(s,e){return s+(e.cost||0);},0);
-  var ikeys = Object.keys(t.byInsurer);
-  var totalBilled = ikeys.reduce(function(s,k){return s+t.byInsurer[k].bill;},0);
-  document.getElementById('ins-billed').textContent = fmtMoney(totalBilled);
+  document.getElementById('ins-billed').textContent = fmtMoney(totalSpent);
   document.getElementById('ins-recovered').textContent = fmtMoney(t.totalReceived);
   document.getElementById('ins-net').textContent = fmtMoney(totalSpent - t.totalReceived);
+  var ikeys = Object.keys(t.byInsurer);
   document.getElementById('ins-by-insurer').innerHTML = ikeys.length
-    ? ikeys.map(function(k){ var v=t.byInsurer[k]; return '<div class="sum-row"><div class="sum-l"><strong>'+k+'</strong><span style="color:#999;font-size:12px">billed '+fmtMoney(v.bill)+'</span></div><strong>'+fmtMoney(v.received)+'</strong></div>'; }).join('')
+    ? ikeys.map(function(k){ var v=t.byInsurer[k]; return '<div class="sum-row"><div class="sum-l"><strong>'+k+'</strong></div><strong>'+fmtMoney(v.received)+'</strong></div>'; }).join('')
     : '';
   var sorted = claims.slice().sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
   document.getElementById('ins-claim-list').innerHTML = sorted.length
     ? sorted.map(function(c){
-        var bill = claimBillAmount(c);
         return '<div class="record-item" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0efeb">'
           +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+c.insurer+' — '+fmtDate(c.date)+'</div>'
-          +'<div style="font-size:12px;color:#999;margin-top:2px">Billed '+fmtMoney(bill)+' · Received '+fmtMoney(c.receivedAmount||0)+' · Pending '+fmtMoney(bill-(c.receivedAmount||0))+(c.note?' · '+c.note:'')+'</div></div>'
+          +'<div style="font-size:12px;color:#999;margin-top:2px">Received '+fmtMoney(c.receivedAmount||0)+(c.note?' · '+c.note:'')+'</div></div>'
           +'<button class="btn-sm" onclick="openClaimModal('+c.id+')">✎</button>'
           +'</div>';
       }).join('')
@@ -2900,13 +2898,11 @@ function renderInsuranceSummaryHTML(){
   var t = claimsTotals();
   var totalSpent = entries.reduce(function(s,e){return s+(e.cost||0);},0);
   if(!claims.length) return '<div class="empty">No insurance claims yet.</div>';
+  var html = '<div class="sum-row" style="font-weight:700"><div class="sum-l">Total Expense</div><span>'+fmtMoney(totalSpent)+'</span></div>'
+    + '<div class="sum-row" style="font-weight:700"><div class="sum-l">Recovered</div><span style="color:#1a6b4a">'+fmtMoney(t.totalReceived)+'</span></div>'
+    + '<div class="sum-row" style="font-weight:700"><div class="sum-l">Balance Unrecovered</div><span style="color:#c0392b">'+fmtMoney(totalSpent - t.totalReceived)+'</span></div>';
   var ikeys = Object.keys(t.byInsurer);
-  var totalBilled = ikeys.reduce(function(s,k){return s+t.byInsurer[k].bill;},0);
-  var html = '<div class="sum-row" style="font-weight:700"><div class="sum-l">Total claimed (billed)</div><span>'+fmtMoney(totalBilled)+'</span></div>'
-    + '<div class="sum-row" style="font-weight:700"><div class="sum-l">Total recovered</div><span style="color:#1a6b4a">'+fmtMoney(t.totalReceived)+'</span></div>'
-    + '<div class="sum-row" style="font-weight:700"><div class="sum-l">Unrecovered / pending</div><span style="color:#c0392b">'+fmtMoney(totalBilled - t.totalReceived)+'</span></div>'
-    + '<div class="sum-row" style="font-weight:700"><div class="sum-l">Net out-of-pocket</div><span>'+fmtMoney(totalSpent - t.totalReceived)+'</span></div>';
-  html += ikeys.map(function(k){ var v=t.byInsurer[k]; return '<div class="sum-row" style="padding-left:14px;font-size:12px;color:#666"><div class="sum-l">– '+k+'</div><span>Billed '+fmtMoney(v.bill)+' · Recovered '+fmtMoney(v.received)+' · Pending '+fmtMoney(v.bill-v.received)+'</span></div>'; }).join('');
+  html += ikeys.map(function(k){ var v=t.byInsurer[k]; return '<div class="sum-row" style="padding-left:14px;font-size:12px;color:#666"><div class="sum-l">– '+k+'</div><span>'+fmtMoney(v.received)+'</span></div>'; }).join('');
   return html;
 }
 
