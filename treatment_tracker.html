@@ -1013,8 +1013,18 @@ function buildChips(){
   var html = '<button class="chip'+(curFilter==='all'?' on':'')+'" onclick="setFilter(\'all\')">All</button>';
   // Category chips — only those actually used
   var used={}; entries.forEach(function(e){ used[e.cat]=1; });
+  var usedSubs={};
+  entries.forEach(function(e){ if(!usedSubs[e.cat]) usedSubs[e.cat]={}; usedSubs[e.cat][e.sub||e.cat]=1; });
   CATEGORIES.forEach(function(c){
-    if(used[c.key]) html += '<button class="chip'+(curFilter===c.key?' on':'')+'" onclick="setFilter(\''+c.key+'\')">'+c.key+'</button>';
+    if(!used[c.key]) return;
+    html += '<button class="chip'+(curFilter===c.key?' on':'')+'" onclick="setFilter(\''+c.key+'\')">'+c.key+'</button>';
+    var subs = Object.keys(usedSubs[c.key]||{});
+    if(subs.length>1){
+      subs.forEach(function(s){
+        var f='sub:'+c.key+'|||'+s;
+        html += '<button class="chip'+(curFilter===f?' on':'')+'" style="border-style:dotted" onclick="setFilter(\''+f.replace(/'/g,"\\'")+'\')">'+s+'</button>';
+      });
+    }
   });
   // Episode chips
   var eps = distinct('episode');
@@ -1034,6 +1044,12 @@ function renderTimeline(){
   var data = entries;
   if(curFilter!=='all'){
     if(curFilter.indexOf('ep:')===0){ var ep=curFilter.slice(3); data=entries.filter(function(e){return e.episode===ep;}); }
+    else if(curFilter.indexOf('sub:')===0){
+      var rest = curFilter.slice(4);
+      var parts = rest.split('|||');
+      var fc=parts[0], fs=parts[1];
+      data = entries.filter(function(e){ return e.cat===fc && (e.sub||e.cat)===fs; });
+    }
     else data=entries.filter(function(e){return e.cat===curFilter;});
   }
   if(!data.length){ list.innerHTML='<div class="empty">No entries'+(curFilter!=='all'?' for this filter':'')+'.<br>Switch to the Add tab to create one.</div>'; return; }
