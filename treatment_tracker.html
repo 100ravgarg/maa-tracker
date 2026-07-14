@@ -1111,7 +1111,8 @@ function exportBackup(){
   var payload={
     entries:entries, customSubs:customSubs, notes:notes, sectionOrder:sectionOrder,
     bloodReports:bloodReports, customParams:customParams, customLabs:customLabs, keyOverrides:keyOverrides,
-    at:new Date().toISOString(), v:6
+    hospitals:HOSPITALS, doctors:DOCTORS, insurers:INSURERS, claims:claims,
+    at:new Date().toISOString(), v:7
   };
   dl(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),'maa_backup_'+new Date().toISOString().slice(0,10)+'.json');
   toast('✓ Backup downloaded (incl. blood)');
@@ -1135,8 +1136,13 @@ function restoreBackup(ev){
       if(d.customParams) customParams=d.customParams;
       if(d.customLabs) customLabs=d.customLabs;
       if(d.keyOverrides) keyOverrides=d.keyOverrides;
-      saveBlood();
-      saveData(); buildChips(); updateHeader(); renderSettings(); refreshDatalists();
+      if(d.hospitals) HOSPITALS=d.hospitals;
+      if(d.doctors) DOCTORS=d.doctors;
+      if(d.insurers) INSURERS=d.insurers;
+      if(d.claims) claims=d.claims;
+      reconcileLists();
+      saveBlood(); saveLists();
+      saveData(); buildChips(); updateHeader(); renderSettings(); refreshDatalists(); buildHospSelect(); buildDocSelect();
       document.getElementById('imp-bak').value='';
       toast('✓ Restored '+entries.length+' entries'+bloodNote);
     }catch(err){toast('Could not read backup file');}
@@ -1186,7 +1192,8 @@ function importCSV(ev){
       if(!imported.length){toast('No valid rows found');return;}
       if(!confirm('Replace '+entries.length+' entries with '+imported.length+' from CSV?\n\nThis corrected list will become the truth on ALL your devices.')) return;
       entries=imported.sort(function(a,b){return b.date.localeCompare(a.date);});
-      saveData(); buildChips(); updateHeader(); refreshDatalists();
+      reconcileLists();
+      saveData(); buildChips(); updateHeader(); refreshDatalists(); buildHospSelect(); buildDocSelect();
       document.getElementById('imp-csv').value='';
       renderSummary();
       // Excel import is AUTHORITATIVE — force-overwrite Drive so the other device gets
@@ -1249,7 +1256,6 @@ function gSignOut(){if(window._gToken)google.accounts.oauth2.revoke(window._gTok
 var GD_FILENAME = 'maa_tracker_data.json';
 var _gFileId = null;
 
-// Gather all app data into one object
 function collectAllData(){
   return {
     entries: entries,
@@ -1260,6 +1266,10 @@ function collectAllData(){
     customLabs: customLabs,
     keyOverrides: keyOverrides,
     sectionOrder: sectionOrder,
+    hospitals: HOSPITALS,
+    doctors: DOCTORS,
+    insurers: INSURERS,
+    claims: claims,
     savedAt: Date.now()
   };
 }
@@ -1275,7 +1285,12 @@ function applyAllData(d){
   if(d.customLabs) customLabs = d.customLabs;
   if(d.keyOverrides) keyOverrides = d.keyOverrides;
   if(d.sectionOrder) sectionOrder = d.sectionOrder;
-  saveData(); saveNotes(); saveBlood();
+  if(d.hospitals) HOSPITALS = d.hospitals;
+  if(d.doctors) DOCTORS = d.doctors;
+  if(d.insurers) INSURERS = d.insurers;
+  if(d.claims) claims = d.claims;
+  reconcileLists();
+  saveData(); saveNotes(); saveBlood(); saveLists();
   window._applyingSync = false;
 }
 // Merge two data sets — union by id, keeping the newest. Prevents data loss.
@@ -1295,10 +1310,19 @@ function mergeData(local, remote){
     (b||[]).forEach(function(r){ var k=r.date+'|'+(r.lab||''); if(!map[k]) map[k]=r; });
     return Object.keys(map).map(function(k){ return map[k]; });
   }
+  function mergeStrList(a,b){
+    var seen={}, out=[];
+    (a||[]).concat(b||[]).forEach(function(v){ if(v && !seen[v]){ seen[v]=1; out.push(v); } });
+    return out;
+  }
   return {
     entries: mergeById(local.entries, remote.entries),
     notes: mergeById(local.notes, remote.notes),
     bloodReports: mergeReports(local.bloodReports, remote.bloodReports),
+    claims: mergeById(local.claims, remote.claims),
+    hospitals: mergeStrList(local.hospitals, remote.hospitals),
+    doctors: mergeStrList(local.doctors, remote.doctors),
+    insurers: mergeStrList(local.insurers, remote.insurers),
     // For settings-like data, prefer whichever was saved most recently
     customSubs: (remote.savedAt>local.savedAt? remote.customSubs : local.customSubs) || local.customSubs || remote.customSubs,
     customParams: (remote.savedAt>local.savedAt? remote.customParams : local.customParams) || local.customParams || remote.customParams,
@@ -1354,7 +1378,7 @@ function fbInit(){
       else if(curPage==='expenses') renderExpenses();
       else if(curPage==='notes') renderNotes();
       else if(curPage==='settings') renderSettings();
-      updateHeader(); refreshDatalists();
+      updateHeader(); refreshDatalists(); buildHospSelect(); buildDocSelect();
       setFbStatus(true);
     }, function(err){
       setFbStatus(false, err && err.message);
