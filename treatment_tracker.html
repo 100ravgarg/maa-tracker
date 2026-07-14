@@ -2887,7 +2887,7 @@ function renderInsurance(){
         var bill = claimBillAmount(c);
         return '<div class="record-item" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0efeb">'
           +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+c.insurer+' — '+fmtDate(c.date)+'</div>'
-          +'<div style="font-size:12px;color:#999;margin-top:2px">Billed '+fmtMoney(bill)+' · Received '+fmtMoney(c.receivedAmount||0)+(c.note?' · '+c.note:'')+'</div></div>'
+          +'<div style="font-size:12px;color:#999;margin-top:2px">Billed '+fmtMoney(bill)+' · Received '+fmtMoney(c.receivedAmount||0)+' · Pending '+fmtMoney(bill-(c.receivedAmount||0))+(c.note?' · '+c.note:'')+'</div></div>'
           +'<button class="btn-sm" onclick="openClaimModal('+c.id+')">✎</button>'
           +'</div>';
       }).join('')
