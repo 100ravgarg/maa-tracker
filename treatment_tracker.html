@@ -529,6 +529,10 @@ Tip: start lines with - for a checklist"></textarea></div>
       <input type="text" id="claim-bill" readonly style="background:#f0f0f0;font-weight:700"></div>
     <div class="fg"><label>Amount received from insurer (₹)</label>
       <input type="number" id="claim-received" placeholder="0" min="0" inputmode="numeric"></div>
+    <div class="row2">
+      <div class="fg"><label>Received by</label><select id="claim-received-by"><option value="Gaurav">Gaurav</option><option value="Saurav">Saurav</option></select></div>
+      <div class="fg"><label>Payment type</label><select id="claim-payment-type"><option value="Cashless">Cashless</option><option value="Reimbursement">Reimbursement</option></select></div>
+    </div>
     <div style="display:flex;gap:8px;margin-top:8px">
       <button onclick="saveClaim()" class="btn-add" style="flex:1">Save Claim</button>
       <button id="claim-del" onclick="deleteClaim()" style="display:none;padding:12px 16px;background:#fdf0ef;color:#c0392b;border:1px solid #f5c0bb;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Delete</button>
@@ -1263,9 +1267,20 @@ function renderExpenses(){
   document.getElementById('e-avg').textContent = entries.length ? fmtMoney(total/entries.length) : '₹0';
   var byP={};
   entries.forEach(function(e){ if(e.cost>0&&e.paid){ if(!byP[e.paid])byP[e.paid]={n:0,t:0}; byP[e.paid].n++; byP[e.paid].t+=e.cost; } });
+  var recByP={};
+  claims.forEach(function(c){ if(c.receivedBy){ recByP[c.receivedBy]=(recByP[c.receivedBy]||0)+(c.receivedAmount||0); } });
   var pkeys=Object.keys(byP).sort(function(a,b){return byP[b].t-byP[a].t;});
+  var totalRecAll = Object.keys(recByP).reduce(function(s,k){return s+recByP[k];},0);
   document.getElementById('e-person').innerHTML = pkeys.length
-    ? pkeys.map(function(p){return '<div class="sum-row"><div class="sum-l"><span style="font-size:20px">👤</span><strong>'+p+'</strong><span style="color:#999;font-size:12px">'+byP[p].n+' payment'+(byP[p].n===1?'':'s')+'</span></div><strong>'+fmtMoney(byP[p].t)+'</strong></div>';}).join('')
+    ? ('<div class="sum-row" style="font-weight:700;border-bottom:2px solid #eee;padding-bottom:10px;margin-bottom:4px"><div class="sum-l">Overall</div><span>'+fmtMoney(total)+' spent · '+fmtMoney(totalRecAll)+' recovered · '+fmtMoney(total-totalRecAll)+' net</span></div>')
+      + pkeys.map(function(p){
+          var rec = recByP[p]||0;
+          var net = byP[p].t - rec;
+          return '<div class="sum-row"><div class="sum-l"><span style="font-size:20px">👤</span><strong>'+p+'</strong><span style="color:#999;font-size:12px">'+byP[p].n+' payment'+(byP[p].n===1?'':'s')+'</span></div>'
+            +'<div style="text-align:right"><div><strong>'+fmtMoney(byP[p].t)+'</strong></div>'
+            +(rec>0?'<div style="font-size:11px;color:#1a6b4a">Recovered '+fmtMoney(rec)+' · Net '+fmtMoney(net)+'</div>':'')
+            +'</div></div>';
+        }).join('')
     : '<div class="empty">No "Paid by" data yet.<br><span style="font-size:12px">Select who paid when adding entries.</span></div>';
   document.getElementById('e-type').innerHTML = renderTypeBreakdownHTML();
   document.getElementById('e-list').innerHTML = withCost.length
@@ -2781,6 +2796,8 @@ function openClaimModal(id){
     document.getElementById('claim-date').value = c.date||'';
     document.getElementById('claim-note').value = c.note||'';
     document.getElementById('claim-received').value = c.receivedAmount||'';
+    document.getElementById('claim-received-by').value = c.receivedBy||'Gaurav';
+    document.getElementById('claim-payment-type').value = c.paymentType||'Cashless';
     document.getElementById('claim-del').style.display='block';
   } else {
     editingClaimId = null;
@@ -2789,6 +2806,8 @@ function openClaimModal(id){
     document.getElementById('claim-date').value = new Date().toISOString().split('T')[0];
     document.getElementById('claim-note').value = '';
     document.getElementById('claim-received').value = '';
+    document.getElementById('claim-received-by').value = 'Gaurav';
+    document.getElementById('claim-payment-type').value = 'Cashless';
     document.getElementById('claim-del').style.display='none';
   }
   renderClaimEntryPicker();
@@ -2832,15 +2851,17 @@ function saveClaim(){
   var date = document.getElementById('claim-date').value;
   var note = document.getElementById('claim-note').value.trim();
   var received = parseFloat(document.getElementById('claim-received').value)||0;
+  var receivedBy = document.getElementById('claim-received-by').value;
+  var paymentType = document.getElementById('claim-payment-type').value;
   if(!insurer){ toast('Pick an insurer (add one in Settings if needed)'); return; }
   if(!claimPickedIds.length){ toast('Tick at least one expense'); return; }
   if(editingClaimId){
     for(var i=0;i<claims.length;i++){
-      if(claims[i].id===editingClaimId){ claims[i].insurer=insurer; claims[i].date=date; claims[i].note=note; claims[i].receivedAmount=received; claims[i].entryIds=claimPickedIds.slice(); break; }
+      if(claims[i].id===editingClaimId){ claims[i].insurer=insurer; claims[i].date=date; claims[i].note=note; claims[i].receivedAmount=received; claims[i].receivedBy=receivedBy; claims[i].paymentType=paymentType; claims[i].entryIds=claimPickedIds.slice(); break; }
     }
     toast('✓ Claim updated');
   } else {
-    claims.push({id:Date.now(), insurer:insurer, date:date, note:note, receivedAmount:received, entryIds:claimPickedIds.slice()});
+    claims.push({id:Date.now(), insurer:insurer, date:date, note:note, receivedAmount:received, receivedBy:receivedBy, paymentType:paymentType, entryIds:claimPickedIds.slice()});
     toast('✓ Claim added');
   }
   saveLists();
@@ -2888,7 +2909,7 @@ function renderInsurance(){
     ? sorted.map(function(c){
         return '<div class="record-item" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0efeb">'
           +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+c.insurer+' — '+fmtDate(c.date)+'</div>'
-          +'<div style="font-size:12px;color:#999;margin-top:2px">Received '+fmtMoney(c.receivedAmount||0)+(c.note?' · '+c.note:'')+'</div></div>'
+          +'<div style="font-size:12px;color:#999;margin-top:2px">Received '+fmtMoney(c.receivedAmount||0)+(c.receivedBy?' by '+c.receivedBy:'')+(c.paymentType?' · '+c.paymentType:'')+(c.note?' · '+c.note:'')+'</div></div>'
           +'<button class="btn-sm" onclick="openClaimModal('+c.id+')">✎</button>'
           +'</div>';
       }).join('')
